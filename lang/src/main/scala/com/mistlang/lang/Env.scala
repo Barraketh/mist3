@@ -42,13 +42,3 @@ object Lazy {
   def apply[Ast, T](expr: Ast, env: () => Env[T], eval: (Env[T], Ast) => T) =
     new Lazy[T](() => eval(env(), expr))
 }
-
-sealed trait EnvValue[+T]
-
-object EnvValue {
-  case class Term[T](value: T) extends EnvValue[T]
-  case class TupleVal[T](arr: List[EnvValue[T]]) extends EnvValue[T]
-  case class FuncVal[T](numArgs: Int, f: List[EnvValue[T]] => EnvValue[T]) extends EnvValue[T]
-  case object UnitVal extends EnvValue[Nothing]
-
-}

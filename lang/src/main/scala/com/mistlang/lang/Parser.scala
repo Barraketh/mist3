@@ -38,8 +38,16 @@ object Grammar {
 
   def ident[_: P] = name.map(s => Leaf(AstOp.Ident(s)))
 
-  def lambda[_: P] = P("fn" ~/ "(" ~ name.rep(0, ",") ~ ")" ~ "=>" ~ expr).map { case (args, body) =>
-    Node(AstOp.Lambda(args.toList), body :: Nil)
+  def typeExpr[_: P] = ident | tuple
+
+  def argDecl[_: P] = P(name ~/ ":" ~ expr)
+
+  def lambda[_: P] = P("fn" ~/ "(" ~ argDecl.rep(0, ",") ~ ")" ~ (":" ~ typeExpr).? ~ "=>" ~ expr).map {
+    case (args, outType, body) =>
+      Node(
+        AstOp.Lambda(args.map(_._1).toList, outType.isDefined),
+        args.map(_._2).toList ::: outType.toList ::: body :: Nil
+      )
   }
 
   def tuple[_: P] = P("#[" ~/ expr.rep(0, ",") ~ "]").map(l => Node(AstOp.Tuple, l.toList))

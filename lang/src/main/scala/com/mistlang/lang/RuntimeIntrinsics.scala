@@ -1,22 +1,39 @@
 package com.mistlang.lang
 
-import com.mistlang.lang.EnvValue.{FuncVal, Term, TupleVal}
+import Interpreter._
 
 object RuntimeIntrinsics {
-  private def value[T](a: Any): T = a.asInstanceOf[Term[Any]].value.asInstanceOf[T]
+  private def fromEnvValue(e: RuntimeValue): Any = e match {
+    case StrVal(value)  => value
+    case IntVal(value)  => value
+    case BoolVal(value) => value
+    case TupleVal(arr)  => arr
+    case UnitVal        => ()
+    case _              => throw new RuntimeException(s"Invalid value $e")
+  }
+
+  private def toEnvValue(a: Any): RuntimeValue = a match {
+    case s: String             => StrVal(s)
+    case i: Int                => IntVal(i)
+    case b: Boolean            => BoolVal(b)
+    case l: List[RuntimeValue] => TupleVal(l)
+    case ()                    => UnitVal
+    case other                 => throw new RuntimeException(s"Can't convert $other to env value")
+  }
+
   private def as[T](a: Any): T = a.asInstanceOf[T]
 
-  private def f1[A](f: A => Any) = FuncVal[Any](
+  private def f1[A](f: A => Any) = FuncVal(
     1,
-    (l: List[EnvValue[Any]]) => Term(f(value[A](l.head)))
+    (l: List[RuntimeValue]) => toEnvValue(f(as[A](fromEnvValue(l.head))))
   )
 
   private def f2[A, B](f: (A, B) => Any) = FuncVal(
     2,
-    (l: List[EnvValue[Any]]) => Term(f(value[A](l.head), value[B](l(1))))
+    (l: List[RuntimeValue]) => toEnvValue(f(as[A](fromEnvValue(l.head)), as[B](fromEnvValue(l(1)))))
   )
 
-  val intrinsics: Map[String, FuncVal[Any]] = Map(
+  val intrinsics: Map[String, FuncVal] = Map(
     "println" -> f1[Any](println),
     "+" -> f2[Int, Int]((a, b) => a + b),
     "-" -> f2[Int, Int]((a, b) => a - b),
@@ -24,27 +41,28 @@ object RuntimeIntrinsics {
     "==" -> f2[Any, Any]((a, b) => a == b),
     "at" -> FuncVal(
       2,
-      (l: List[EnvValue[Any]]) => {
-        val t = as[TupleVal[Any]](l.head)
-        val idx = value[Int](l(1))
-        t.arr(idx)
+      (l: List[RuntimeValue]) => {
+        val t = as[TupleVal](l.head)
+        val idx = as[IntVal](l(1))
+        t.arr(idx.value)
       }
     ),
     "append" -> FuncVal(
       2,
-      (l: List[EnvValue[Any]]) => {
-        val t = as[TupleVal[Any]](l.head)
+      (l: List[RuntimeValue]) => {
+        val t = as[TupleVal](l.head)
         TupleVal(t.arr :+ l(1))
       }
     ),
     "if" -> FuncVal(
       3,
-      (l: List[EnvValue[Any]]) => {
-        val pred = value[Boolean](l.head)
-        val success = as[FuncVal[Any]](l(1))
-        val fail = as[FuncVal[Any]](l(2))
-        if (pred) success.f(Nil) else fail.f(Nil)
+      (l: List[RuntimeValue]) => {
+        val pred = as[BoolVal](l.head)
+        val success = as[FuncVal](l(1))
+        val fail = as[FuncVal](l(2))
+        if (pred.value) success.f(Nil) else fail.f(Nil)
       }
     )
   )
+
 }

@@ -1,16 +1,16 @@
 package com.mistlang.lang
 
-import com.mistlang.lang.EnvValue.Term
+import com.mistlang.lang.Interpreter.{IntVal, RuntimeValue, StrVal}
 import utest._
 
 object InterpreterTest extends TestSuite {
-  val env = RuntimeIntrinsics.intrinsics.foldLeft(Env.empty[EnvValue[Any]]) { case (curEnv, (name, f)) =>
+  val env = RuntimeIntrinsics.intrinsics.foldLeft(Env.empty[RuntimeValue]) { case (curEnv, (name, f)) =>
     curEnv.put(name, Strict(f))
   }
   val interpreter = new Interpreter
   val parser = FastparseParser
 
-  def run(s: String): EnvValue[Any] = {
+  def run(s: String): RuntimeValue = {
     val e = parser.parse(s)
     interpreter.eval(env, e)
   }
@@ -19,7 +19,7 @@ object InterpreterTest extends TestSuite {
     test("Test arithm") {
       val s = "+(3, *(2, 6))"
       val res = run(s)
-      assert(res == Term(15))
+      assert(res == IntVal(15))
     }
 
     test("Block") {
@@ -30,7 +30,7 @@ object InterpreterTest extends TestSuite {
             | val b = 6
             | +(a, b)
             |}""".stripMargin
-        ) == Term(9)
+        ) == IntVal(9)
       )
 
       assert(
@@ -43,7 +43,7 @@ object InterpreterTest extends TestSuite {
             | }
             | +(a, b)
             |}""".stripMargin
-        ) == Term(13)
+        ) == IntVal(13)
       )
 
       assert(
@@ -55,7 +55,7 @@ object InterpreterTest extends TestSuite {
             |}
             |+(a, b)
             |}""".stripMargin
-        ) == Term(12)
+        ) == IntVal(12)
       )
     }
 
@@ -72,14 +72,14 @@ object InterpreterTest extends TestSuite {
         }
 
         myFunc()
-      """) == Term("baz")
+      """) == StrVal("baz")
       )
     }
 
     test("Recursion") {
       assert(run {
         """{
-          def fib = fn (n) => {
+          def fib = fn (n : Any) => {
             if (
               ==(n, 0),
               fn () => 0,
@@ -93,7 +93,7 @@ object InterpreterTest extends TestSuite {
 
           fib(6)
          }""".stripMargin
-      } == Term(8))
+      } == IntVal(8))
     }
 
     test("Recursive init") {
@@ -116,7 +116,7 @@ object InterpreterTest extends TestSuite {
           val a = #[ 3, 5, 6 ]
           at(a, 1)
           """.stripMargin
-        ) == Term(5)
+        ) == IntVal(5)
       )
     }
   }

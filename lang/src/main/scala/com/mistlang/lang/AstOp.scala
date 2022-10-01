@@ -10,7 +10,7 @@ object AstOp {
   case class Literal(value: Any) extends Expr
 
   case class Ident(name: String) extends Expr
-  case class Lambda(argNames: List[String]) extends Expr
+  case class Lambda(argNames: List[String], hasOutput: Boolean) extends Expr
 
   case object Tuple extends Expr
   case object Block extends Expr
