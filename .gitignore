@@ -3,3 +3,7 @@
 .idea
 target
 .bsp
+.vscode
+.VSCodeCounter
+.metals
+.bloop
