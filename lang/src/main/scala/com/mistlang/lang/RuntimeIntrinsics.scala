@@ -1,6 +1,6 @@
 package com.mistlang.lang
 
-import Interpreter._
+import com.mistlang.lang.Interpreter._
 
 object RuntimeIntrinsics {
   private def fromEnvValue(e: RuntimeValue): Any = e match {
@@ -25,12 +25,12 @@ object RuntimeIntrinsics {
 
   private def f1[A](f: A => Any) = FuncVal(
     1,
-    (l: List[RuntimeValue]) => toEnvValue(f(as[A](fromEnvValue(l.head))))
+    () => (l: List[RuntimeValue]) => toEnvValue(f(as[A](fromEnvValue(l.head))))
   )
 
   private def f2[A, B](f: (A, B) => Any) = FuncVal(
     2,
-    (l: List[RuntimeValue]) => toEnvValue(f(as[A](fromEnvValue(l.head)), as[B](fromEnvValue(l(1)))))
+    () => (l: List[RuntimeValue]) => toEnvValue(f(as[A](fromEnvValue(l.head)), as[B](fromEnvValue(l(1)))))
   )
 
   val intrinsics: Map[String, FuncVal] = Map(
@@ -41,27 +41,30 @@ object RuntimeIntrinsics {
     "==" -> f2[Any, Any]((a, b) => a == b),
     "at" -> FuncVal(
       2,
-      (l: List[RuntimeValue]) => {
-        val t = as[TupleVal](l.head)
-        val idx = as[IntVal](l(1))
-        t.arr(idx.value)
-      }
+      () =>
+        (l: List[RuntimeValue]) => {
+          val t = as[TupleVal](l.head)
+          val idx = as[IntVal](l(1))
+          t.arr(idx.value)
+        }
     ),
     "append" -> FuncVal(
       2,
-      (l: List[RuntimeValue]) => {
-        val t = as[TupleVal](l.head)
-        TupleVal(t.arr :+ l(1))
-      }
+      () =>
+        (l: List[RuntimeValue]) => {
+          val t = as[TupleVal](l.head)
+          TupleVal(t.arr :+ l(1))
+        }
     ),
     "if" -> FuncVal(
       3,
-      (l: List[RuntimeValue]) => {
-        val pred = as[BoolVal](l.head)
-        val success = as[FuncVal](l(1))
-        val fail = as[FuncVal](l(2))
-        if (pred.value) success.f(Nil) else fail.f(Nil)
-      }
+      () =>
+        (l: List[RuntimeValue]) => {
+          val pred = as[BoolVal](l.head)
+          val success = as[FuncVal](l(1))
+          val fail = as[FuncVal](l(2))
+          if (pred.value) success.f(Nil) else fail.f(Nil)
+        }
     )
   )
 

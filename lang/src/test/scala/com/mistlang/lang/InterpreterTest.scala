@@ -5,7 +5,7 @@ import utest._
 
 object InterpreterTest extends TestSuite {
   val env = RuntimeIntrinsics.intrinsics.foldLeft(Env.empty[RuntimeValue]) { case (curEnv, (name, f)) =>
-    curEnv.put(name, Strict(f))
+    curEnv.put(name, f)
   }
   val interpreter = new Interpreter
   val parser = FastparseParser
@@ -79,7 +79,7 @@ object InterpreterTest extends TestSuite {
     test("Recursion") {
       assert(run {
         """{
-          def fib = fn (n : Any) => {
+          def fib(n : Any) => {
             if (
               ==(n, 0),
               fn () => 0,
@@ -94,19 +94,6 @@ object InterpreterTest extends TestSuite {
           fib(6)
          }""".stripMargin
       } == IntVal(8))
-    }
-
-    test("Recursive init") {
-      intercept[RuntimeException] {
-        run {
-          """{
-           def a = +(b, 3)
-           def b = -(a, 1)
-  
-           a
-         }""".stripMargin
-        }
-      }
     }
 
     test("Tuples") {
