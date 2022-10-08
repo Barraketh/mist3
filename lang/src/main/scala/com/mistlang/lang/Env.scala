@@ -18,3 +18,27 @@ class Env[T](map: Map[String, T], parent: Option[Env[T]]) {
 object Env {
   def empty[T] = new Env[T](Map.empty, None)
 }
+
+sealed trait ValueHolder[T] {
+  def value: T
+}
+case class Strict[T](value: T) extends ValueHolder[T]
+class Lazy[T](expr: () => T) extends ValueHolder[T] {
+  private var res: Option[T] = None
+  private var initializing = false
+
+  override def value: T = {
+    res.getOrElse {
+      if (initializing) throw new RuntimeException("Encountered loop during lazy initializataion")
+      initializing = true
+      val out = expr()
+      res = Some(out)
+      out
+    }
+  }
+}
+
+object Lazy {
+  def apply[Ast, T](expr: Ast, env: () => Env[ValueHolder[T]], eval: (Env[ValueHolder[T]], Ast) => T) =
+    new Lazy[T](() => eval(env(), expr))
+}
