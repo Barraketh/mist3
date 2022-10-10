@@ -35,6 +35,23 @@ object TyperTest extends TestSuite {
       assert(res == Type.IntType)
       intercept[TypeError](run(code("\"1\"")))
     }
+    test("Recursion") {
+      def code(inParam: String, outParam: Option[String]) = {
+        s"""{
+          def fib(n : $inParam)${outParam.map(o => s":$o").getOrElse("")} => {
+            if (==(n, 0)) 0
+            else if (==(n, 1)) 1
+            else +( fib(-(n,1)), fib(-(n,2)) )
+          }
+
+          fib(6)
+         }"""
+      }
+
+      assert(run(code("Int", Some("Int"))) == Type.IntType)
+      intercept[TypeError](run(code("Any", Some("Int"))))
+      intercept[RuntimeException](run(code("Int", None)))
+    }
   }
 
 }

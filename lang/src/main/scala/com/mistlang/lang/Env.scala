@@ -29,7 +29,10 @@ class Lazy[T](expr: () => T) extends ValueHolder[T] {
 
   override def value: T = {
     res.getOrElse {
-      if (initializing) throw new RuntimeException("Encountered loop during lazy initializataion")
+      if (initializing)
+        throw new RuntimeException(
+          "Encountered loop during lazy initialization. If you are defining a recursive function, please set an out type"
+        )
       initializing = true
       val out = expr()
       res = Some(out)

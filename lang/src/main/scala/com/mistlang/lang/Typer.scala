@@ -4,7 +4,7 @@ import com.mistlang.lang.Ast.Expr
 import com.mistlang.lang.Type._
 import com.mistlang.lang.TypedAst.TypedExpr
 
-case class TypeError(msg: String) extends Exception
+case class TypeError(msg: String) extends RuntimeException(msg)
 
 object Typer {
   type TypeEnv = Env[ValueHolder[Type]]
@@ -22,15 +22,19 @@ object Typer {
     }
   }
 
-  private def evalLambda(env: TypeEnv, f: Ast.FuncData): TypedAst.Lambda = {
+  private def evalLambda(env: TypeEnv, f: Ast.FuncData, name: Option[String]): TypedAst.Lambda = {
     val argTypes = f.args.map(ad => Type.Arg(ad.name, evalExp(env, ad.tpe).tpe))
-    val fnScope = argTypes.foldLeft(env.newScope) { case (curEnv, arg) =>
+    val argScope = argTypes.foldLeft(env.newScope) { case (curEnv, arg) =>
       curEnv.put(arg.name, Strict(arg.tpe))
     }
+    val outType = f.outType.map(evalExp(env, _))
+    val fnScope = (name, outType) match {
+      case (Some(n), Some(e)) => argScope.put(n, Strict(FuncType(argTypes, e.tpe)))
+      case _                  => argScope
+    }
     val typedBody = evalExp(fnScope, f.body)
-    f.outType.foreach { expectedExpr =>
-      val expectedType = evalExp(env, expectedExpr).tpe
-      checkArg("outType", expectedType, typedBody.tpe)
+    outType.foreach { out =>
+      checkArg("outType", out.tpe, typedBody.tpe)
     }
 
     TypedAst.Lambda(typedBody, FuncType(argTypes, typedBody.tpe))
@@ -73,10 +77,10 @@ object Typer {
         }
         TypedAst.Literal(value, tpe)
       case Ast.Tuple(children) => TypedAst.Tuple(children.map(c => evalExp(env, c)))
-      case l: Ast.Lambda       => evalLambda(env, l.data)
+      case l: Ast.Lambda       => evalLambda(env, l.data, l.name)
       case l: Ast.Ident =>
         val t = env.get(l.name).map(_.value).getOrElse {
-          throw new RuntimeException(s"${l.name} not found")
+          error(s"${l.name} not found")
         }
         TypedAst.Ident(l.name, t)
       case c: Ast.Call      => evalFuncApply(env, c)
@@ -91,12 +95,16 @@ object Typer {
       case d: Ast.Def =>
         topLevelEnv = topLevelEnv.put(
           d.name,
-          Lazy[Ast.Expr, Type](Ast.Lambda(d.data), () => topLevelEnv, (env, ast: Ast.Expr) => evalExp(env, ast).tpe)
+          Lazy[Ast.Expr, Type](
+            Ast.Lambda(d.data, Some(d.name)),
+            () => topLevelEnv,
+            (env, ast: Ast.Expr) => evalExp(env, ast).tpe
+          )
         )
       case _ => ()
     }
     val defs = stmts.collect { case d: Ast.Def =>
-      TypedAst.Def(d.name, evalLambda(topLevelEnv, d.data))
+      TypedAst.Def(d.name, evalLambda(topLevelEnv, d.data, Some(d.name)))
     }
     val others = stmts
       .filter {

@@ -60,7 +60,7 @@ object Grammar {
   def argDeclList[_: P] = P("(" ~ argDecl.rep(0, ",") ~ ")").map(_.toList)
 
   def funcData[_: P] = P(argDeclList ~ (":" ~ expr).? ~ ("=>" | "=") ~ expr).map(FuncData.tupled)
-  def lambda[_: P] = P("fn" ~ funcData).map(Ast.Lambda)
+  def lambda[_: P] = P("fn" ~ funcData).map(Ast.Lambda(_, None))
   def defP[_: P] = P("def" ~ name ~ funcData).map(Ast.Def.tupled)
 
   def stmt[_: P] = P(valP | defP | expr)

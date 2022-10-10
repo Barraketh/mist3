@@ -12,7 +12,7 @@ object Ast {
   case class Tuple(exprs: List[Expr]) extends Expr
   case class Block(stmts: List[Ast]) extends Expr
   case class Call(func: Expr, args: List[Expr]) extends Expr
-  case class Lambda(data: FuncData) extends Expr
+  case class Lambda(data: FuncData, name: Option[String]) extends Expr
   case class If(expr: Expr, succ: Expr, fail: Expr) extends Expr
 
   case class Val(name: String, expr: Expr) extends Ast
