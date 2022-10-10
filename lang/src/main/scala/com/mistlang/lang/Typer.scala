@@ -2,12 +2,12 @@ package com.mistlang.lang
 
 import com.mistlang.lang.Ast.Expr
 import com.mistlang.lang.Type._
-import com.mistlang.lang.TypedAst.TypedExpr
+import com.mistlang.lang.TypedAst.{Synthetic, TypedExpr}
 
 case class TypeError(msg: String) extends RuntimeException(msg)
 
 object Typer {
-  type TypeEnv = Env[ValueHolder[Type]]
+  type TypeEnv = Env[ValueHolder[TypedAst]]
 
   def error(msg: String) = throw TypeError(msg)
 
@@ -25,11 +25,11 @@ object Typer {
   private def evalLambda(env: TypeEnv, f: Ast.FuncData, name: Option[String]): TypedAst.Lambda = {
     val argTypes = f.args.map(ad => Type.Arg(ad.name, evalExp(env, ad.tpe).tpe))
     val argScope = argTypes.foldLeft(env.newScope) { case (curEnv, arg) =>
-      curEnv.put(arg.name, Strict(arg.tpe))
+      curEnv.put(arg.name, Strict(Synthetic(arg.tpe)))
     }
     val outType = f.outType.map(evalExp(env, _))
     val fnScope = (name, outType) match {
-      case (Some(n), Some(e)) => argScope.put(n, Strict(FuncType(argTypes, e.tpe)))
+      case (Some(n), Some(e)) => argScope.put(n, Strict(Synthetic(FuncType(argTypes, e.tpe))))
       case _                  => argScope
     }
     val typedBody = evalExp(fnScope, f.body)
@@ -82,7 +82,7 @@ object Typer {
         val t = env.get(l.name).map(_.value).getOrElse {
           error(s"${l.name} not found")
         }
-        TypedAst.Ident(l.name, t)
+        TypedAst.Ident(l.name, t.tpe)
       case c: Ast.Call      => evalFuncApply(env, c)
       case Ast.Block(stmts) => TypedAst.Block(eval(env.newScope, stmts))
       case i: Ast.If        => evalIf(env, i)
@@ -95,16 +95,16 @@ object Typer {
       case d: Ast.Def =>
         topLevelEnv = topLevelEnv.put(
           d.name,
-          Lazy[Ast.Expr, Type](
+          Lazy(
             Ast.Lambda(d.data, Some(d.name)),
             () => topLevelEnv,
-            (env, ast: Ast.Expr) => evalExp(env, ast).tpe
+            (env, ast: Ast.Expr) => evalExp(env, ast)
           )
         )
       case _ => ()
     }
     val defs = stmts.collect { case d: Ast.Def =>
-      TypedAst.Def(d.name, evalLambda(topLevelEnv, d.data, Some(d.name)))
+      TypedAst.Def(d.name, topLevelEnv.get(d.name).get.value.asInstanceOf[TypedAst.Lambda])
     }
     val others = stmts
       .filter {
@@ -116,7 +116,7 @@ object Typer {
           case e: Expr => (curEnv, curAsts :+ evalExp(curEnv, e))
           case Ast.Val(name, expr) =>
             val t = evalExp(curEnv, expr)
-            (curEnv.put(name, Strict(t.tpe)), curAsts :+ TypedAst.Val(name, t))
+            (curEnv.put(name, Strict(Synthetic(t.tpe))), curAsts :+ TypedAst.Val(name, t))
         }
       }
     defs ::: others._2
@@ -152,6 +152,7 @@ object TypedAst {
       else AnyType
     }
   }
+  case class Synthetic(tpe: Type) extends TypedExpr
 
 }
 

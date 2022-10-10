@@ -1,10 +1,11 @@
 package com.mistlang.lang
 
+import com.mistlang.lang.TypedAst.Synthetic
 import utest._
 
 object TyperTest extends TestSuite {
-  val env = TyperIntrinsics.intrinsics.foldLeft(Env.empty[ValueHolder[Type]]) { case (curEnv, (name, f)) =>
-    curEnv.put(name, Strict(f))
+  val env = TyperIntrinsics.intrinsics.foldLeft(Env.empty[ValueHolder[TypedAst]]) { case (curEnv, (name, f)) =>
+    curEnv.put(name, Strict(Synthetic(f)))
   }
 
   val parser = FastparseParser
