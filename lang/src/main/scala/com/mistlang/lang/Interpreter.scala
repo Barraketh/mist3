@@ -6,7 +6,6 @@ import com.mistlang.lang.Interpreter._
 case class InterpreterError(msg: String) extends Exception
 
 class Interpreter {
-
   def error(msg: String) = throw InterpreterError(msg)
 
   private def evalFuncApply(env: Env[RuntimeValue], call: Call): RuntimeValue = {
@@ -31,6 +30,15 @@ class Interpreter {
     }
   }
 
+  def evalIf(env: Env[RuntimeValue], i: If): RuntimeValue = {
+    val cond = evalExp(env, i.expr)
+    cond match {
+      case BoolVal(value) =>
+        if (value) evalExp(env, i.succ) else evalExp(env, i.fail)
+      case other => error(s"Unexpected condition - expected bool, got $other")
+    }
+  }
+
   def evalExp(env: Env[RuntimeValue], ast: Expr): RuntimeValue = {
     ast match {
       case Literal(value) =>
@@ -46,6 +54,7 @@ class Interpreter {
       case c: Call => evalFuncApply(env, c)
       case l: Lambda =>
         FuncVal(l.data.args.length, () => evalFuncData(env, l.data))
+      case i: If => evalIf(env, i)
     }
   }
 

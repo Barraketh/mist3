@@ -80,15 +80,9 @@ object InterpreterTest extends TestSuite {
       assert(run {
         """{
           def fib(n : Any) => {
-            if (
-              ==(n, 0),
-              fn () => 0,
-              fn () => if (
-                ==(n, 1),
-                fn () => 1,
-                fn () => +( fib(-(n,1)), fib(-(n,2)) )
-              )
-            )
+            if (==(n, 0)) 0
+            else if (==(n, 1)) 1
+            else +( fib(-(n,1)), fib(-(n,2)) )
           }
 
           fib(6)

@@ -7,6 +7,7 @@ import com.mistlang.lang.TypedAst.TypedExpr
 case class TypeError(msg: String) extends Exception
 
 object Typer {
+  type TypeEnv = Env[ValueHolder[Type]]
 
   def error(msg: String) = throw TypeError(msg)
 
@@ -21,7 +22,7 @@ object Typer {
     }
   }
 
-  private def evalLambda(env: Env[ValueHolder[Type]], f: Ast.FuncData): TypedAst.Lambda = {
+  private def evalLambda(env: TypeEnv, f: Ast.FuncData): TypedAst.Lambda = {
     val argTypes = f.args.map(ad => Type.Arg(ad.name, evalExp(env, ad.tpe).tpe))
     val fnScope = argTypes.foldLeft(env.newScope) { case (curEnv, arg) =>
       curEnv.put(arg.name, Strict(arg.tpe))
@@ -35,7 +36,7 @@ object Typer {
     TypedAst.Lambda(typedBody, FuncType(argTypes, typedBody.tpe))
   }
 
-  private def evalFuncApply(env: Env[ValueHolder[Type]], c: Ast.Call): TypedExpr = {
+  private def evalFuncApply(env: TypeEnv, c: Ast.Call): TypedExpr = {
     val fTyped = evalExp(env, c.func)
     fTyped.tpe match {
       case f: FuncType =>
@@ -51,7 +52,18 @@ object Typer {
     }
   }
 
-  private def evalExp(env: Env[ValueHolder[Type]], ast: Expr): TypedExpr = {
+  private def evalIf(env: TypeEnv, i: Ast.If): TypedExpr = {
+    val typedCond = evalExp(env, i.expr)
+    typedCond.tpe match {
+      case BoolType =>
+        val success = evalExp(env, i.succ)
+        val fail = evalExp(env, i.fail)
+        TypedAst.If(typedCond, success, fail)
+      case other => error(s"Expected boolean in condition - got $other")
+    }
+  }
+
+  private def evalExp(env: TypeEnv, ast: Expr): TypedExpr = {
     ast match {
       case Ast.Literal(value) =>
         val tpe = value match {
@@ -60,10 +72,8 @@ object Typer {
           case _: String  => StrType
         }
         TypedAst.Literal(value, tpe)
-      case Ast.Tuple(children) =>
-        val typedChildren = children.map(c => evalExp(env, c))
-        TypedAst.Tuple(typedChildren, TupleType(typedChildren.map(_.tpe)))
-      case l: Ast.Lambda => evalLambda(env, l.data)
+      case Ast.Tuple(children) => TypedAst.Tuple(children.map(c => evalExp(env, c)))
+      case l: Ast.Lambda       => evalLambda(env, l.data)
       case l: Ast.Ident =>
         val t = env.get(l.name).map(_.value).getOrElse {
           throw new RuntimeException(s"${l.name} not found")
@@ -71,10 +81,11 @@ object Typer {
         TypedAst.Ident(l.name, t)
       case c: Ast.Call      => evalFuncApply(env, c)
       case Ast.Block(stmts) => TypedAst.Block(eval(env.newScope, stmts))
+      case i: Ast.If        => evalIf(env, i)
     }
   }
 
-  def eval(env: Env[ValueHolder[Type]], stmts: List[Ast]): List[TypedAst] = {
+  def eval(env: TypeEnv, stmts: List[Ast]): List[TypedAst] = {
     var topLevelEnv = env
     stmts.foreach {
       case d: Ast.Def =>
@@ -113,7 +124,9 @@ object TypedAst {
 
   case class Literal(value: Any, tpe: Type) extends TypedExpr
   case class Ident(name: String, tpe: Type) extends TypedExpr
-  case class Tuple(exprs: List[TypedAst], tpe: TupleType) extends TypedExpr
+  case class Tuple(exprs: List[TypedAst]) extends TypedExpr {
+    val tpe: Type = TupleType(exprs.map(_.tpe))
+  }
   case class Block(stmts: List[TypedAst]) extends TypedExpr {
     override val tpe: Type = stmts.lastOption.map(_.tpe).getOrElse(UnitType)
   }
@@ -124,6 +137,12 @@ object TypedAst {
   }
   case class Def(name: String, func: Lambda) extends TypedAst {
     override def tpe: Type = UnitType
+  }
+  case class If(expr: TypedExpr, success: TypedExpr, fail: TypedExpr) extends TypedExpr {
+    val tpe: Type = {
+      if (success.tpe == fail.tpe) success.tpe
+      else AnyType
+    }
   }
 
 }

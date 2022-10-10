@@ -55,16 +55,6 @@ object RuntimeIntrinsics {
           val t = as[TupleVal](l.head)
           TupleVal(t.arr :+ l(1))
         }
-    ),
-    "if" -> FuncVal(
-      3,
-      () =>
-        (l: List[RuntimeValue]) => {
-          val pred = as[BoolVal](l.head)
-          val success = as[FuncVal](l(1))
-          val fail = as[FuncVal](l(2))
-          if (pred.value) success.f(Nil) else fail.f(Nil)
-        }
     )
   )
 

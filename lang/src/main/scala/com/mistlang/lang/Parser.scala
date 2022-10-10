@@ -41,7 +41,11 @@ object Grammar {
 
   def tuple[_: P] = P("#[" ~/ expr.rep(0, ",") ~ "]").map(l => Ast.Tuple(l.toList))
 
-  def term[_: P]: P[Expr] = P(str | int | bool | tuple | lambda | ident | block)
+  def term[_: P]: P[Expr] = P(str | int | bool | tuple | lambda | ifP | ident | block)
+
+  def ifP[_: P]: P[Expr] = P("if" ~/ "(" ~ expr ~ ")" ~ "\n".? ~ expr ~ "\n".? ~ "else" ~ "\n".? ~ expr).map {
+    case (cond, succ, fail) => Ast.If(cond, succ, fail)
+  }
 
   def trailer[_: P]: P[Seq[Expr]] = P("(" ~/ ("\n".rep ~ expr ~ "\n".rep).rep(0, ",") ~ ")")
 
