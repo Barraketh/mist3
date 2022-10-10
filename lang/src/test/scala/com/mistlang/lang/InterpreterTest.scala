@@ -1,13 +1,13 @@
 package com.mistlang.lang
 
-import com.mistlang.lang.Interpreter.{IntVal, RuntimeValue, StrVal}
+import RuntimeValue._
 import utest._
 
 object InterpreterTest extends TestSuite {
-  val env = RuntimeIntrinsics.intrinsics.foldLeft(Env.empty[RuntimeValue]) { case (curEnv, (name, f)) =>
-    curEnv.put(name, f)
+  val env = RuntimeIntrinsics.intrinsics.foldLeft(Env.empty[ValueHolder[RuntimeValue]]) { case (curEnv, (name, f)) =>
+    curEnv.put(name, Strict(f))
   }
-  val interpreter = new Interpreter
+  val interpreter = Interpreter
   val parser = FastparseParser
 
   def run(s: String): RuntimeValue = {
