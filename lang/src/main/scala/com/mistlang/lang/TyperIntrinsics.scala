@@ -10,6 +10,7 @@ object TyperIntrinsics {
     "Any" -> AnyType,
     "+" -> FuncType(List(Type.Arg("a", IntType), Type.Arg("b", IntType)), IntType),
     "-" -> FuncType(List(Type.Arg("a", IntType), Type.Arg("b", IntType)), IntType),
+    "*" -> FuncType(List(Type.Arg("a", IntType), Type.Arg("b", IntType)), IntType),
     "==" -> FuncType(List(Type.Arg("a", AnyType), Type.Arg("b", AnyType)), BoolType)
   )
 }

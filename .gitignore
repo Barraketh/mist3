@@ -7,3 +7,4 @@ target
 .VSCodeCounter
 .metals
 .bloop
+test
