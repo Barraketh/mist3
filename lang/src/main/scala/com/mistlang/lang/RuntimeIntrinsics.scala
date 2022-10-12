@@ -24,12 +24,12 @@ object RuntimeIntrinsics {
   private def as[T](a: Any): T = a.asInstanceOf[T]
 
   private def f1[A](f: A => Any) = FuncVal(
-    1,
+    Some(1),
     (l: List[RuntimeValue]) => toEnvValue(f(as[A](fromEnvValue(l.head))))
   )
 
   private def f2[A, B](f: (A, B) => Any) = FuncVal(
-    2,
+    Some(2),
     (l: List[RuntimeValue]) => toEnvValue(f(as[A](fromEnvValue(l.head)), as[B](fromEnvValue(l(1)))))
   )
 
@@ -39,8 +39,9 @@ object RuntimeIntrinsics {
     "-" -> f2[Int, Int]((a, b) => a - b),
     "*" -> f2[Int, Int]((a, b) => a * b),
     "==" -> f2[Any, Any]((a, b) => a == b),
+    "Tuple" -> FuncVal(None, (l: List[RuntimeValue]) => TupleVal(l)),
     "at" -> FuncVal(
-      2,
+      Some(2),
       (l: List[RuntimeValue]) => {
         val t = as[TupleVal](l.head)
         val idx = as[IntVal](l(1))
@@ -48,10 +49,19 @@ object RuntimeIntrinsics {
       }
     ),
     "append" -> FuncVal(
-      2,
+      Some(2),
       (l: List[RuntimeValue]) => {
         val t = as[TupleVal](l.head)
         TupleVal(t.arr :+ l(1))
+      }
+    ),
+    "if" -> FuncVal(
+      Some(3),
+      (l: List[RuntimeValue]) => {
+        val cond = as[BoolVal](l.head)
+        val succ = as[FuncVal](l(1))
+        val fail = as[FuncVal](l(2))
+        if (cond.value) succ.f(Nil) else fail.f(Nil)
       }
     )
   )

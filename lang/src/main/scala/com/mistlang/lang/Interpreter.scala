@@ -3,19 +3,29 @@ package com.mistlang.lang
 import com.mistlang.lang.Ast._
 import com.mistlang.lang.RuntimeValue._
 
-case class InterpreterError(msg: String) extends Exception
+case class InterpreterError(msg: String) extends Exception(msg)
 
-object Interpreter {
-  type RuntimeEnv = Env[ValueHolder[RuntimeValue]]
+object Interpreter extends {
+  type RuntimeEnv = Env[RuntimeValue]
 
   def error(msg: String) = throw InterpreterError(msg)
 
-  private def evalFuncApply(env: RuntimeEnv, call: Call): RuntimeValue = {
+  def evalLiteral(l: Literal): RuntimeValue = {
+    l.value match {
+      case i: Int     => IntVal(i)
+      case b: Boolean => BoolVal(b)
+      case s: String  => StrVal(s)
+    }
+  }
+
+  private def evalCall(env: RuntimeEnv, call: Call): RuntimeValue = {
     val f = evalExp(env, call.func)
     f match {
       case f: FuncVal =>
-        if (f.numArgs != call.args.length)
-          error(s"Unexpected number of args - expected ${f.numArgs}, got ${call.args.length}")
+        f.numArgs.foreach { numArgs =>
+          if (numArgs != call.args.length)
+            error(s"Unexpected number of args - expected ${f.numArgs}, got ${call.args.length}")
+        }
 
         val resolvedArgs = call.args.map(e => evalExp(env, e))
         f.f(resolvedArgs)
@@ -23,74 +33,81 @@ object Interpreter {
     }
   }
 
-  private def evalFuncData(env: RuntimeEnv, l: FuncData) = { (args: List[RuntimeValue]) =>
-    {
-      val newEnv = l.args.map(_.name).zip(args).foldLeft(env.newScope) { case (curEnv, (name, value)) =>
-        curEnv.put(name, Strict(value))
+  private def evalLambda(env: RuntimeEnv, l: Lambda): RuntimeValue = {
+    FuncVal(
+      Some(l.args.length),
+      (args: List[RuntimeValue]) => {
+        val newEnv = l.args.zip(args).foldLeft(env.newScope) { case (curEnv, (name, value)) =>
+          curEnv.put(name.name, value)
+        }
+        evalExp(newEnv, l.body)
       }
-      evalExp(newEnv, l.body)
-    }
+    )
   }
 
   def evalIf(env: RuntimeEnv, i: If): RuntimeValue = {
     val cond = evalExp(env, i.expr)
     cond match {
       case BoolVal(value) =>
-        if (value) evalExp(env, i.succ) else evalExp(env, i.fail)
+        if (value) evalExp(env, i.success) else evalExp(env, i.fail)
       case other => error(s"Unexpected condition - expected bool, got $other")
     }
   }
 
-  def evalExp(env: RuntimeEnv, ast: Expr): RuntimeValue = {
-    ast match {
-      case Literal(value) =>
-        value match {
-          case i: Int     => IntVal(i)
-          case b: Boolean => BoolVal(b)
-          case s: String  => StrVal(s)
-        }
-      case Tuple(children) => TupleVal(children.map(t => evalExp(env, t)))
-      case Block(stmts)    => eval(env.newScope, stmts)
-      case Ident(name) =>
-        env.get(name).map(_.value).getOrElse { error(s"$name not found") }
-      case c: Call => evalFuncApply(env, c)
-      case l: Lambda =>
-        FuncVal(l.data.args.length, evalFuncData(env, l.data))
-      case i: If => evalIf(env, i)
-    }
-  }
+  private def evalBlock(env: RuntimeEnv, b: Block): RuntimeValue = {
+    val newEnv = env.newScope
+    val stmts = b.stmts
 
-  def eval(env: RuntimeEnv, stmts: List[Ast]): RuntimeValue = {
-    var topLevelEnv = env
-    stmts.foreach {
-      case d: Ast.Def =>
-        topLevelEnv = topLevelEnv.put(d.name, Lazy(Lambda(d.data, Some(d.name)), () => topLevelEnv, evalExp))
-      case _ => ()
+    val (defs, others) = stmts.partition {
+      case _: Def => true
+      case _      => false
     }
-    stmts
-      .filter {
-        case _: Ast.Def => false
-        case _          => true
-      }
-      .foldLeft((topLevelEnv, UnitVal: RuntimeValue)) { case ((curEnv, _), stmt) =>
+    val topLevel = defs.collect { case d: Def =>
+      d.name -> ((curEnv: RuntimeEnv) => evalExp(curEnv, d.func))
+    }
+    val topLevelEnv = newEnv.putTopLevel(topLevel)
+    others
+      .foldLeft(topLevelEnv -> (UnitVal: RuntimeValue)) { case ((curEnv, _), stmt) =>
         stmt match {
-          case e: Expr             => (curEnv, evalExp(curEnv, e))
-          case Ast.Val(name, expr) => (curEnv.put(name, Strict(evalExp(curEnv, expr))), UnitVal)
+          case e: Expr => (curEnv, evalExp(curEnv, e))
+          case v: Val =>
+            val evaluated = evalExp(curEnv, v.expr)
+            (curEnv.put(v.name, evaluated), UnitVal)
         }
       }
       ._2
+  }
+
+  def evalExp(env: RuntimeEnv, e: Expr): RuntimeValue = e match {
+    case l: Literal      => evalLiteral(l)
+    case i: Ident        => env.get(i.name).getOrElse(error(s"${i.name} not found"))
+    case l: Lambda       => evalLambda(env, l)
+    case c: Call         => evalCall(env, c)
+    case b: Block        => evalBlock(env, b)
+    case i: If           => evalIf(env, i)
+    case Tuple(children) => TupleVal(children.map(t => evalExp(env, t)))
+
   }
 }
 
 sealed trait RuntimeValue
 
 object RuntimeValue {
+  case class FuncVal(numArgs: Option[Int], f: List[RuntimeValue] => RuntimeValue) extends RuntimeValue
+  case object UnitVal extends RuntimeValue
   case class IntVal(value: Int) extends RuntimeValue
   case class BoolVal(value: Boolean) extends RuntimeValue
   case class StrVal(value: String) extends RuntimeValue
   case class TupleVal(arr: List[RuntimeValue]) extends RuntimeValue
 
-  case class FuncVal(numArgs: Int, f: List[RuntimeValue] => RuntimeValue) extends RuntimeValue
+}
 
-  object UnitVal extends RuntimeValue
+object RuntimeInterpreter {
+
+  val env = RuntimeIntrinsics.intrinsics.foldLeft(Env.empty[RuntimeValue]) { case (curEnv, (name, f)) =>
+    curEnv.put(name, f)
+  }
+
+  def eval(e: List[Ast]): RuntimeValue = Interpreter.evalExp(env, Block(e))
+
 }

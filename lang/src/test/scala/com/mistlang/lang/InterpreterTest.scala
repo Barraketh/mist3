@@ -4,15 +4,12 @@ import RuntimeValue._
 import utest._
 
 object InterpreterTest extends TestSuite {
-  val env = RuntimeIntrinsics.intrinsics.foldLeft(Env.empty[ValueHolder[RuntimeValue]]) { case (curEnv, (name, f)) =>
-    curEnv.put(name, Strict(f))
-  }
-  val interpreter = Interpreter
+  val interpreter = RuntimeInterpreter
   val parser = FastparseParser
 
   def run(s: String): RuntimeValue = {
     val e = parser.parse(s)
-    interpreter.eval(env, e)
+    interpreter.eval(e)
   }
 
   val tests = Tests {

@@ -1,7 +1,6 @@
 package com.mistlang.lang
 
-import com.mistlang.java.codegen.{CodeGenerator, StdLibCodegen}
-import com.mistlang.lang.TypedAst.Synthetic
+import com.mistlang.java.codegen.CodeGenerator
 import utest._
 
 import java.io.{BufferedWriter, File, FileWriter}
@@ -9,10 +8,6 @@ import java.net.URLClassLoader
 import javax.tools.ToolProvider
 
 object JavaCodeGeneratorTest extends TestSuite {
-  val env = TyperIntrinsics.intrinsics.foldLeft(Env.empty[ValueHolder[TypedAst]]) { case (curEnv, (name, f)) =>
-    curEnv.put(name, Strict(Synthetic(f)))
-  }
-
   val parser = FastparseParser
   val typer = Typer
   val gen = CodeGenerator
@@ -21,7 +16,7 @@ object JavaCodeGeneratorTest extends TestSuite {
 
   def run(s: String) = {
     val e = parser.parse(s)
-    val typed = typer.eval(env, e)
+    val typed = typer.eval(TyperEnv.env, e)
     val c = gen.compile(typed, Nil, "MyClass")
     println(c)
 
@@ -38,8 +33,6 @@ object JavaCodeGeneratorTest extends TestSuite {
     val instance = cls.getDeclaredConstructors.apply(0).newInstance()
     cls.getDeclaredMethods.toList.find(_.getName == "run").get.invoke(instance)
   }
-
-  println(StdLibCodegen.functionsClass)
 
   val tests = Tests {
     test("Test arithm") {

@@ -1,15 +1,30 @@
 package com.mistlang.lang
 
-class Env[T](map: Map[String, T], parent: Option[Env[T]]) {
+class Env[T](map: Map[String, ValueHolder[T]], parent: Option[Env[T]]) {
   def put(name: String, value: T): Env[T] = {
     if (map.contains(name))
       throw new RuntimeException(s"$name already defined")
 
-    new Env(map + (name -> value), parent)
+    new Env(map + (name -> Strict(value)), parent)
+  }
+
+  def putLazy(name: String, value: () => T): Env[T] = {
+    if (map.contains(name))
+      throw new RuntimeException(s"$name already defined")
+
+    new Env(map + (name -> new Lazy(value)), parent)
+  }
+
+  def putTopLevel(toPut: Iterable[(String, Env[T] => T)]): Env[T] = {
+    var nextEnv = this
+    toPut.foreach { case (name, eval) =>
+      nextEnv = nextEnv.putLazy(name, () => eval(nextEnv))
+    }
+    nextEnv
   }
 
   def get(name: String): Option[T] = {
-    map.get(name).orElse(parent.flatMap(_.get(name)))
+    map.get(name).map(_.value).orElse(parent.flatMap(_.get(name)))
   }
 
   def newScope: Env[T] = new Env(Map.empty, Some(this))
@@ -39,9 +54,4 @@ class Lazy[T](expr: () => T) extends ValueHolder[T] {
       out
     }
   }
-}
-
-object Lazy {
-  def apply[Ast, T](expr: Ast, env: () => Env[ValueHolder[T]], eval: (Env[ValueHolder[T]], Ast) => T) =
-    new Lazy[T](() => eval(env(), expr))
 }

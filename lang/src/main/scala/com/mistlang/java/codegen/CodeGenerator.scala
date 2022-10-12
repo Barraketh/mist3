@@ -1,7 +1,7 @@
 package com.mistlang.java.codegen
 
 import com.mistlang.lang.Type.{FuncType, TupleType, UnitType}
-import com.mistlang.lang.TypedAst.Lambda
+import com.mistlang.lang.TypedAst._
 import com.mistlang.lang.{Type, TypedAst}
 
 object CodeGenerator {
@@ -29,12 +29,12 @@ object CodeGenerator {
 
   private val binaryOperators = List("==", "+", "-", "*")
 
-  private def compileCall(c: TypedAst.Call): String = {
+  private def compileCall(c: Call): String = {
     c.func match {
-      case i: TypedAst.Ident if binaryOperators.contains(i.name) =>
+      case i: Ident if binaryOperators.contains(i.name) =>
         s"(${compile(c.args.head)} ${i.name} ${compile(c.args(1))})"
-      case i: TypedAst.Ident if i.name == "at" =>
-        s"${compile(c.args.head)}._${c.args(1).asInstanceOf[TypedAst.Literal].value}"
+      case i: Ident if i.name == "at" =>
+        s"${compile(c.args.head)}._${c.args(1).asInstanceOf[Literal].value}"
       case _ =>
         val apply = if (c.func.tpe.asInstanceOf[FuncType].isLambda) ".apply" else ""
         s"""${compile(c.func)}$apply(${c.args.map(compile).mkString(", ")})"""
@@ -42,12 +42,12 @@ object CodeGenerator {
   }
 
   private def compileDefs(stmts: List[TypedAst]): String =
-    stmts.collect { case d: TypedAst.Def => compile(d) }.mkString("\n")
+    stmts.collect { case d: Def => compile(d) }.mkString("\n")
 
   private def compileNonDefs(stmts: List[TypedAst]): (String, Type) = {
     val nonDefStmts = stmts.filter {
-      case _: TypedAst.Def => false
-      case _               => true
+      case _: Def => false
+      case _      => true
     }
     val nonDefs = nonDefStmts.map(compile).map(_ + ";")
     val addReturn = nonDefStmts.last.tpe != UnitType
@@ -62,7 +62,7 @@ object CodeGenerator {
     (withReturn.mkString("\n"), nonDefStmts.last.tpe)
   }
 
-  private def compileBlock(b: TypedAst.Block): String = {
+  private def compileBlock(b: Block): String = {
     val tpeName = compileType(b.tpe)
     val funcName = b.tpe match {
       case UnitType => "VFunction0"
@@ -79,9 +79,9 @@ object CodeGenerator {
   private def compileFunc(name: String, func: Lambda): String = {
     val compiledArgs = func.tpe.args.map(a => s"${compileType(a.tpe)} ${a.name}").mkString(", ")
     val compiledBody = func.body match {
-      case b: TypedAst.Block if !(b.stmts.exists {
-            case _: TypedAst.Def => true
-            case _               => false
+      case b: Block if !(b.stmts.exists {
+            case _: Def => true
+            case _      => false
           }) =>
         compileNonDefs(b.stmts)._1
       case other => "return " + compile(other) + ";"
@@ -91,36 +91,36 @@ object CodeGenerator {
        |}""".stripMargin
   }
 
-  private def compileIf(i: TypedAst.If): String =
+  private def compileIf(i: If): String =
     s"""((${compile(i.expr)}) ? ${compile(i.success)} : ${compile(i.fail)})"""
 
-  private def compileTuple(t: TypedAst.Tuple): String =
+  private def compileTuple(t: Tuple): String =
     s"new Tuple${t.exprs.length}(${t.exprs.map(compile).mkString(", ")})"
 
-  private def compileLambda(l: TypedAst.Lambda): String = {
+  private def compileLambda(l: Lambda): String = {
     s"""(new ${compileFunctionType(l.tpe)} () {
        |  ${compileFunc("apply", l)}
        |})""".stripMargin
   }
 
   def compile(ast: TypedAst): String = ast match {
-    case expr: TypedAst.TypedExpr =>
+    case expr: Expr =>
       expr match {
-        case TypedAst.Literal(value, _) =>
+        case Literal(value, _) =>
           value match {
             case _: String => "\"" + value + "\""
             case _         => value.toString
           }
-        case TypedAst.Ident(name, _) => name
-        case t: TypedAst.Tuple       => compileTuple(t)
-        case b: TypedAst.Block       => compileBlock(b)
-        case c: TypedAst.Call        => compileCall(c)
-        case l: TypedAst.Lambda      => compileLambda(l)
-        case i: TypedAst.If          => compileIf(i)
-        case s: TypedAst.Synthetic   => ""
+        case Ident(name, _) => name
+        case t: Tuple       => compileTuple(t)
+        case b: Block       => compileBlock(b)
+        case c: Call        => compileCall(c)
+        case l: Lambda      => compileLambda(l)
+        case i: If          => compileIf(i)
+        case s: Synthetic   => ""
       }
-    case TypedAst.Val(name, expr) => s"var $name = ${compile(expr)}"
-    case d: TypedAst.Def          => compileFunc(d.name, d.func)
+    case v: Val => s"var ${v.name} = ${compile(v.expr)}"
+    case d: Def => compileFunc(d.name, d.func)
 
   }
 

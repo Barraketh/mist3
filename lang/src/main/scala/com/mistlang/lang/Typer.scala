@@ -1,15 +1,41 @@
 package com.mistlang.lang
 
-import com.mistlang.lang.Ast.Expr
+import com.mistlang.lang.Ast._
 import com.mistlang.lang.Type._
-import com.mistlang.lang.TypedAst.{Synthetic, TypedExpr}
+import com.mistlang.lang.TypedAst.Synthetic
 
 case class TypeError(msg: String) extends RuntimeException(msg)
 
 object Typer {
-  type TypeEnv = Env[ValueHolder[TypedAst]]
+  type TypeEnv = Env[TypedAst.Expr]
 
   def error(msg: String) = throw TypeError(msg)
+
+  def evalLiteral(l: Literal): TypedAst.Expr = {
+    val tpe = l.value match {
+      case _: Int     => IntType
+      case _: Boolean => BoolType
+      case _: String  => StrType
+    }
+    TypedAst.Literal(l.value, tpe)
+  }
+
+  def evalIdent(env: Typer.TypeEnv, i: Ident): TypedAst.Expr = {
+    val t = env.get(i.name).getOrElse {
+      error(s"${i.name} not found")
+    }
+    TypedAst.Ident(i.name, t.tpe)
+  }
+
+  def evalTuple(env: Typer.TypeEnv, t: Tuple): TypedAst.Expr = {
+    val typedExprs = t.exprs.map(c => evalExp(env, c))
+    TypedAst.Tuple(typedExprs, TupleType(typedExprs.map(_.tpe)))
+  }
+
+  def evalBlock(env: Typer.TypeEnv, b: Block): TypedAst.Expr = {
+    val typedStmts = eval(env.newScope, b.stmts)
+    TypedAst.Block(typedStmts, typedStmts.lastOption.map(_.tpe).getOrElse(UnitType))
+  }
 
   private def checkArg(name: String, expected: Type, actual: Type): Unit = {
     (expected, actual) match {
@@ -22,16 +48,16 @@ object Typer {
     }
   }
 
-  private def evalLambda(env: TypeEnv, f: Ast.FuncData, name: Option[String]): TypedAst.Lambda = {
-    val isLambda = name.isEmpty
+  private def evalLambda(env: TypeEnv, f: Lambda): TypedAst.Expr = {
+    val isLambda = f.name.isEmpty
 
     val argTypes = f.args.map(ad => Type.Arg(ad.name, evalExp(env, ad.tpe).tpe))
     val argScope = argTypes.foldLeft(env.newScope) { case (curEnv, arg) =>
-      curEnv.put(arg.name, Strict(Synthetic(arg.tpe)))
+      curEnv.put(arg.name, TypedAst.Synthetic(arg.tpe))
     }
     val outType = f.outType.map(evalExp(env, _))
-    val fnScope = (name, outType) match {
-      case (Some(n), Some(e)) => argScope.put(n, Strict(Synthetic(FuncType(argTypes, e.tpe, isLambda))))
+    val fnScope = (f.name, outType) match {
+      case (Some(n), Some(e)) => argScope.put(n, TypedAst.Synthetic(FuncType(argTypes, e.tpe, isLambda)))
       case _                  => argScope
     }
     val typedBody = evalExp(fnScope, f.body)
@@ -42,7 +68,7 @@ object Typer {
     TypedAst.Lambda(typedBody, FuncType(argTypes, typedBody.tpe, isLambda))
   }
 
-  private def evalCall(env: TypeEnv, c: Ast.Call): TypedExpr = {
+  private def evalCall(env: TypeEnv, c: Call): TypedAst.Expr = {
     val fTyped = evalExp(env, c.func)
     fTyped.tpe match {
       case f: FuncType =>
@@ -58,112 +84,77 @@ object Typer {
     }
   }
 
-  private def evalIf(env: TypeEnv, i: Ast.If): TypedExpr = {
+  private def evalIf(env: TypeEnv, i: If): TypedAst.Expr = {
     val typedCond = evalExp(env, i.expr)
     typedCond.tpe match {
       case BoolType =>
-        val success = evalExp(env, i.succ)
+        val success = evalExp(env, i.success)
         val fail = evalExp(env, i.fail)
-        TypedAst.If(typedCond, success, fail)
+        val tpe: Type = {
+          if (success.tpe == fail.tpe) success.tpe
+          else AnyType
+        }
+        TypedAst.If(typedCond, success, fail, tpe)
       case other => error(s"Expected boolean in condition - got $other")
     }
   }
 
-  private def evalExp(env: TypeEnv, ast: Expr): TypedExpr = {
+  private def evalVal(env: TypeEnv, v: Val): (TypeEnv, TypedAst) = {
+    val resolved = evalExp(env, v.expr)
+    val nextExpr = resolved.tpe match {
+      case f: FuncType if !f.isLambda =>
+        TypedAst.Lambda(
+          TypedAst.Call(resolved, f.args.map(a => TypedAst.Ident(a.name, a.tpe)), f.outType),
+          f.copy(isLambda = true)
+        )
+      case _ => resolved
+    }
+    (env.put(v.name, nextExpr), TypedAst.Val(v.name, nextExpr, UnitType))
+  }
+
+  private def evalDef(env: TypeEnv, d: Def): TypedAst =
+    TypedAst.Def(d.name, env.get(d.name).get.asInstanceOf[TypedAst.Lambda], UnitType)
+
+  def evalExp(env: TypeEnv, ast: Expr): TypedAst.Expr = {
     ast match {
-      case Ast.Literal(value) =>
-        val tpe = value match {
-          case _: Int     => IntType
-          case _: Boolean => BoolType
-          case _: String  => StrType
-        }
-        TypedAst.Literal(value, tpe)
-      case Ast.Tuple(children) => TypedAst.Tuple(children.map(c => evalExp(env, c)))
-      case l: Ast.Lambda       => evalLambda(env, l.data, l.name)
-      case l: Ast.Ident =>
-        val t = env.get(l.name).map(_.value).getOrElse {
-          error(s"${l.name} not found")
-        }
-        TypedAst.Ident(l.name, t.tpe)
-      case c: Ast.Call      => evalCall(env, c)
-      case Ast.Block(stmts) => TypedAst.Block(eval(env.newScope, stmts))
-      case i: Ast.If        => evalIf(env, i)
+      case l: Literal => evalLiteral(l)
+      case i: Ident   => evalIdent(env, i)
+      case t: Tuple   => evalTuple(env, t)
+      case b: Block   => evalBlock(env, b)
+      case c: Call    => evalCall(env, c)
+      case i: If      => evalIf(env, i)
+      case l: Lambda  => evalLambda(env, l)
     }
   }
 
   def eval(env: TypeEnv, stmts: List[Ast]): List[TypedAst] = {
-    var topLevelEnv = env
-    stmts.foreach {
-      case d: Ast.Def =>
-        topLevelEnv = topLevelEnv.put(
-          d.name,
-          Lazy(
-            Ast.Lambda(d.data, Some(d.name)),
-            () => topLevelEnv,
-            (env, ast: Ast.Expr) => evalExp(env, ast)
-          )
-        )
-      case _ => ()
+    val (defs, others) = stmts.partition {
+      case _: Def => true
+      case _      => false
     }
-    val defs = stmts.collect { case d: Ast.Def =>
-      TypedAst.Def(d.name, topLevelEnv.get(d.name).get.value.asInstanceOf[TypedAst.Lambda])
+    val topLevel = defs.collect { case d: Def =>
+      d.name -> ((curEnv: TypeEnv) => evalExp(curEnv, d.func))
     }
-    val others = stmts
-      .filter {
-        case _: Ast.Def => false
-        case _          => true
-      }
-      .foldLeft((topLevelEnv, Nil: List[TypedAst])) { case ((curEnv, curAsts), stmt) =>
+    val topLevelEnv = env.putTopLevel(topLevel)
+
+    (defs ::: others)
+      .foldLeft(topLevelEnv -> (Nil: List[TypedAst])) { case ((curEnv, curAsts), stmt) =>
         stmt match {
           case e: Expr => (curEnv, curAsts :+ evalExp(curEnv, e))
-          case Ast.Val(name, expr) =>
-            val t = evalExp(curEnv, expr)
-            val newExpr = t.tpe match {
-              case f: FuncType if !f.isLambda =>
-                TypedAst.Lambda(
-                  TypedAst.Call(t, f.args.map(a => TypedAst.Ident(a.name, a.tpe)), f.outType),
-                  f.copy(isLambda = true)
-                )
-              case _ => t
-            }
-            (curEnv.put(name, Strict(Synthetic(newExpr.tpe))), curAsts :+ TypedAst.Val(name, newExpr))
+          case d: Def  => (curEnv, curAsts :+ evalDef(curEnv, d))
+          case v: Val =>
+            val (nextEnv, nextAst) = evalVal(curEnv, v)
+            (nextEnv, curAsts :+ nextAst)
         }
       }
-    defs ::: others._2
+      ._2
   }
 }
 
-sealed trait TypedAst {
-  def tpe: Type
-}
-
-object TypedAst {
-  sealed trait TypedExpr extends TypedAst
-
-  case class Literal(value: Any, tpe: Type) extends TypedExpr
-  case class Ident(name: String, tpe: Type) extends TypedExpr
-  case class Tuple(exprs: List[TypedAst]) extends TypedExpr {
-    val tpe: Type = TupleType(exprs.map(_.tpe))
+object TyperEnv {
+  val env = TyperIntrinsics.intrinsics.foldLeft(Env.empty[TypedAst.Expr]) { case (curEnv, (name, f)) =>
+    curEnv.put(name, Synthetic(f))
   }
-  case class Block(stmts: List[TypedAst]) extends TypedExpr {
-    override val tpe: Type = stmts.lastOption.map(_.tpe).getOrElse(UnitType)
-  }
-  case class Call(func: TypedExpr, args: List[TypedExpr], tpe: Type) extends TypedExpr
-  case class Lambda(body: TypedExpr, tpe: FuncType) extends TypedExpr
-  case class Val(name: String, expr: TypedExpr) extends TypedAst {
-    override def tpe: Type = UnitType
-  }
-  case class Def(name: String, func: Lambda) extends TypedAst {
-    override def tpe: Type = UnitType
-  }
-  case class If(expr: TypedExpr, success: TypedExpr, fail: TypedExpr) extends TypedExpr {
-    val tpe: Type = {
-      if (success.tpe == fail.tpe) success.tpe
-      else AnyType
-    }
-  }
-  case class Synthetic(tpe: Type) extends TypedExpr
-
 }
 
 sealed trait Type
