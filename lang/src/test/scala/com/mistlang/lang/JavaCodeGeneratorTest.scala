@@ -1,6 +1,6 @@
 package com.mistlang.lang
 
-import com.mistlang.java.codegen.CodeGenerator
+import com.mistlang.java.codegen.{CodeGenerator, StdLibCodegen}
 import com.mistlang.lang.TypedAst.Synthetic
 import utest._
 
@@ -38,6 +38,8 @@ object JavaCodeGeneratorTest extends TestSuite {
     val instance = cls.getDeclaredConstructors.apply(0).newInstance()
     cls.getDeclaredMethods.toList.find(_.getName == "run").get.invoke(instance)
   }
+
+  println(StdLibCodegen.functionsClass)
 
   val tests = Tests {
     test("Test arithm") {
@@ -101,6 +103,34 @@ object JavaCodeGeneratorTest extends TestSuite {
         """#[3, "Foo", true]""".stripMargin
 
       assert(run(code) == new com.mistlang.java.stdlib.Tuples.Tuple3(3, "Foo", true))
+    }
+    test("Function References") {
+      assert(
+        run(
+          """
+            |def add3(i: Int) = +(i, 3)
+            |
+            |val a = add3
+            |a(3)
+            |""".stripMargin
+        ) == 6
+      )
+    }
+    test("Lambdas") {
+      assert(
+        run("""
+        val a = "foo"
+        val myFunc = {
+          val a = "bar"
+          {
+            val a = "baz"
+            fn () => a
+          }
+        }
+
+        myFunc()
+      """) == "baz"
+      )
     }
   }
 

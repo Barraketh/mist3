@@ -1,20 +1,30 @@
 package com.mistlang.java.codegen
 
 import com.mistlang.lang.Type.{FuncType, TupleType, UnitType}
+import com.mistlang.lang.TypedAst.Lambda
 import com.mistlang.lang.{Type, TypedAst}
 
 object CodeGenerator {
 
   private def compileType(tpe: Type): String = {
     tpe match {
-      case Type.IntType            => "Integer"
-      case Type.StrType            => "String"
-      case Type.BoolType           => "Boolean"
-      case Type.UnitType           => "void"
-      case Type.AnyType            => "Object"
-      case TupleType(arr)          => s"Tuple${arr.length}<${arr.map(compileType).mkString(", ")}>"
-      case FuncType(args, outType) => ???
+      case Type.IntType   => "Integer"
+      case Type.StrType   => "String"
+      case Type.BoolType  => "Boolean"
+      case Type.UnitType  => "void"
+      case Type.AnyType   => "Object"
+      case TupleType(arr) => s"Tuple${arr.length}<${arr.map(compileType).mkString(", ")}>"
+      case f: FuncType    => compileFunctionType(f)
     }
+  }
+
+  private def compileFunctionType(func: FuncType): String = {
+    val argTypes = func.args.map(a => compileType(a.tpe))
+    val outType = compileType(func.outType)
+
+    val genericParams = if (func.outType == UnitType) argTypes else argTypes :+ outType
+    val classPrefix = if (func.outType == UnitType) "VFunction" else "Function"
+    s"${classPrefix}${func.args.length}<${genericParams.mkString(", ")}>"
   }
 
   private val binaryOperators = List("==", "+", "-", "*")
@@ -26,7 +36,8 @@ object CodeGenerator {
       case i: TypedAst.Ident if i.name == "at" =>
         s"${compile(c.args.head)}._${c.args(1).asInstanceOf[TypedAst.Literal].value}"
       case _ =>
-        s"""${compile(c.func)}(${c.args.map(compile).mkString(", ")})"""
+        val apply = if (c.func.tpe.asInstanceOf[FuncType].isLambda) ".apply" else ""
+        s"""${compile(c.func)}$apply(${c.args.map(compile).mkString(", ")})"""
     }
   }
 
@@ -54,8 +65,8 @@ object CodeGenerator {
   private def compileBlock(b: TypedAst.Block): String = {
     val tpeName = compileType(b.tpe)
     val funcName = b.tpe match {
-      case UnitType => "Functions.VFunction0"
-      case _        => s"Functions.Function0<$tpeName>"
+      case UnitType => "VFunction0"
+      case _        => s"Function0<$tpeName>"
     }
     s"""new $funcName() {
        |  ${compileDefs(b.stmts)}
@@ -65,18 +76,17 @@ object CodeGenerator {
        |  }
        |}.apply()""".stripMargin
   }
-
-  private def compileDef(d: TypedAst.Def): String = {
-    val compiledArgs = d.func.tpe.args.map(a => s"${compileType(a.tpe)} ${a.name}").mkString(", ")
-    val compiledBody = d.func.body match {
+  private def compileFunc(name: String, func: Lambda): String = {
+    val compiledArgs = func.tpe.args.map(a => s"${compileType(a.tpe)} ${a.name}").mkString(", ")
+    val compiledBody = func.body match {
       case b: TypedAst.Block if !(b.stmts.exists {
             case _: TypedAst.Def => true
             case _               => false
           }) =>
         compileNonDefs(b.stmts)._1
-      case other => compile(other)
+      case other => "return " + compile(other) + ";"
     }
-    s"""static ${compileType(d.func.tpe.outType)} ${d.name}($compiledArgs) {
+    s"""public ${compileType(func.tpe.outType)} ${name}($compiledArgs) {
        |  $compiledBody
        |}""".stripMargin
   }
@@ -87,6 +97,12 @@ object CodeGenerator {
   private def compileTuple(t: TypedAst.Tuple): String =
     s"new Tuple${t.exprs.length}(${t.exprs.map(compile).mkString(", ")})"
 
+  private def compileLambda(l: TypedAst.Lambda): String = {
+    s"""(new ${compileFunctionType(l.tpe)} () {
+       |  ${compileFunc("apply", l)}
+       |})""".stripMargin
+  }
+
   def compile(ast: TypedAst): String = ast match {
     case expr: TypedAst.TypedExpr =>
       expr match {
@@ -95,16 +111,16 @@ object CodeGenerator {
             case _: String => "\"" + value + "\""
             case _         => value.toString
           }
-        case TypedAst.Ident(name, _)    => name
-        case t: TypedAst.Tuple          => compileTuple(t)
-        case b: TypedAst.Block          => compileBlock(b)
-        case c: TypedAst.Call           => compileCall(c)
-        case TypedAst.Lambda(body, tpe) => ???
-        case i: TypedAst.If             => compileIf(i)
-        case s: TypedAst.Synthetic      => ""
+        case TypedAst.Ident(name, _) => name
+        case t: TypedAst.Tuple       => compileTuple(t)
+        case b: TypedAst.Block       => compileBlock(b)
+        case c: TypedAst.Call        => compileCall(c)
+        case l: TypedAst.Lambda      => compileLambda(l)
+        case i: TypedAst.If          => compileIf(i)
+        case s: TypedAst.Synthetic   => ""
       }
     case TypedAst.Val(name, expr) => s"var $name = ${compile(expr)}"
-    case d: TypedAst.Def          => compileDef(d)
+    case d: TypedAst.Def          => compileFunc(d.name, d.func)
 
   }
 
@@ -114,11 +130,12 @@ object CodeGenerator {
     s"""$pkgStmt
        |import com.mistlang.java.stdlib.*;
        |import com.mistlang.java.stdlib.Tuples.*;
+       |import com.mistlang.java.stdlib.Functions.*;
        |
        |public class $className {
        |  ${compileDefs(asts)}
        |
-       |  public static ${compileType(returnType)} run() {
+       |  public ${compileType(returnType)} run() {
        |    $nonDefs
        |  }
        |}""".stripMargin

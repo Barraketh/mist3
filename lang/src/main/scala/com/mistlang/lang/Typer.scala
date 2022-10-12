@@ -23,13 +23,15 @@ object Typer {
   }
 
   private def evalLambda(env: TypeEnv, f: Ast.FuncData, name: Option[String]): TypedAst.Lambda = {
+    val isLambda = name.isEmpty
+
     val argTypes = f.args.map(ad => Type.Arg(ad.name, evalExp(env, ad.tpe).tpe))
     val argScope = argTypes.foldLeft(env.newScope) { case (curEnv, arg) =>
       curEnv.put(arg.name, Strict(Synthetic(arg.tpe)))
     }
     val outType = f.outType.map(evalExp(env, _))
     val fnScope = (name, outType) match {
-      case (Some(n), Some(e)) => argScope.put(n, Strict(Synthetic(FuncType(argTypes, e.tpe))))
+      case (Some(n), Some(e)) => argScope.put(n, Strict(Synthetic(FuncType(argTypes, e.tpe, isLambda))))
       case _                  => argScope
     }
     val typedBody = evalExp(fnScope, f.body)
@@ -37,10 +39,10 @@ object Typer {
       checkArg("outType", out.tpe, typedBody.tpe)
     }
 
-    TypedAst.Lambda(typedBody, FuncType(argTypes, typedBody.tpe))
+    TypedAst.Lambda(typedBody, FuncType(argTypes, typedBody.tpe, isLambda))
   }
 
-  private def evalFuncApply(env: TypeEnv, c: Ast.Call): TypedExpr = {
+  private def evalCall(env: TypeEnv, c: Ast.Call): TypedExpr = {
     val fTyped = evalExp(env, c.func)
     fTyped.tpe match {
       case f: FuncType =>
@@ -83,7 +85,7 @@ object Typer {
           error(s"${l.name} not found")
         }
         TypedAst.Ident(l.name, t.tpe)
-      case c: Ast.Call      => evalFuncApply(env, c)
+      case c: Ast.Call      => evalCall(env, c)
       case Ast.Block(stmts) => TypedAst.Block(eval(env.newScope, stmts))
       case i: Ast.If        => evalIf(env, i)
     }
@@ -116,7 +118,15 @@ object Typer {
           case e: Expr => (curEnv, curAsts :+ evalExp(curEnv, e))
           case Ast.Val(name, expr) =>
             val t = evalExp(curEnv, expr)
-            (curEnv.put(name, Strict(Synthetic(t.tpe))), curAsts :+ TypedAst.Val(name, t))
+            val newExpr = t.tpe match {
+              case f: FuncType if !f.isLambda =>
+                TypedAst.Lambda(
+                  TypedAst.Call(t, f.args.map(a => TypedAst.Ident(a.name, a.tpe)), f.outType),
+                  f.copy(isLambda = true)
+                )
+              case _ => t
+            }
+            (curEnv.put(name, Strict(Synthetic(newExpr.tpe))), curAsts :+ TypedAst.Val(name, newExpr))
         }
       }
     defs ::: others._2
@@ -168,6 +178,6 @@ object Type {
   case class TupleType(arr: List[Type]) extends Type
 
   case class Arg(name: String, tpe: Type)
-  case class FuncType(args: List[Arg], outType: Type) extends Type
+  case class FuncType(args: List[Arg], outType: Type, isLambda: Boolean) extends Type
 
 }

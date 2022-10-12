@@ -6,16 +6,8 @@ public class Functions {
     Out apply();
   }
 
-  static <Out> Function0<Out> f0(Function0<Out> f) {
-    return f;
-  }
-
   public interface VFunction0 {
     void apply();
-  }
-
-  static VFunction0 vf0(VFunction0 f) {
-    return f;
   }
 
 
@@ -23,16 +15,8 @@ public class Functions {
     Out apply(A _0);
   }
 
-  static <A, Out> Function1<A, Out> f1(Function1<A, Out> f) {
-    return f;
-  }
-
   public interface VFunction1<A> {
-    void apply();
-  }
-
-  static <A> VFunction1<A> vf1(VFunction1<A> f) {
-    return f;
+    void apply(A _0);
   }
 
 
@@ -40,16 +24,8 @@ public class Functions {
     Out apply(A _0, B _1);
   }
 
-  static <A, B, Out> Function2<A, B, Out> f2(Function2<A, B, Out> f) {
-    return f;
-  }
-
   public interface VFunction2<A, B> {
-    void apply();
-  }
-
-  static <A, B> VFunction2<A, B> vf2(VFunction2<A, B> f) {
-    return f;
+    void apply(A _0, B _1);
   }
 
 
@@ -57,16 +33,8 @@ public class Functions {
     Out apply(A _0, B _1, C _2);
   }
 
-  static <A, B, C, Out> Function3<A, B, C, Out> f3(Function3<A, B, C, Out> f) {
-    return f;
-  }
-
   public interface VFunction3<A, B, C> {
-    void apply();
-  }
-
-  static <A, B, C> VFunction3<A, B, C> vf3(VFunction3<A, B, C> f) {
-    return f;
+    void apply(A _0, B _1, C _2);
   }
 
 
@@ -74,16 +42,52 @@ public class Functions {
     Out apply(A _0, B _1, C _2, D _3);
   }
 
-  static <A, B, C, D, Out> Function4<A, B, C, D, Out> f4(Function4<A, B, C, D, Out> f) {
-    return f;
-  }
-
   public interface VFunction4<A, B, C, D> {
-    void apply();
+    void apply(A _0, B _1, C _2, D _3);
   }
 
-  static <A, B, C, D> VFunction4<A, B, C, D> vf4(VFunction4<A, B, C, D> f) {
-    return f;
+
+  public interface Function5<A, B, C, D, E, Out> {
+    Out apply(A _0, B _1, C _2, D _3, E _4);
   }
 
+  public interface VFunction5<A, B, C, D, E> {
+    void apply(A _0, B _1, C _2, D _3, E _4);
+  }
+
+
+  public interface Function6<A, B, C, D, E, F, Out> {
+    Out apply(A _0, B _1, C _2, D _3, E _4, F _5);
+  }
+
+  public interface VFunction6<A, B, C, D, E, F> {
+    void apply(A _0, B _1, C _2, D _3, E _4, F _5);
+  }
+
+
+  public interface Function7<A, B, C, D, E, F, G, Out> {
+    Out apply(A _0, B _1, C _2, D _3, E _4, F _5, G _6);
+  }
+
+  public interface VFunction7<A, B, C, D, E, F, G> {
+    void apply(A _0, B _1, C _2, D _3, E _4, F _5, G _6);
+  }
+
+
+  public interface Function8<A, B, C, D, E, F, G, H, Out> {
+    Out apply(A _0, B _1, C _2, D _3, E _4, F _5, G _6, H _7);
+  }
+
+  public interface VFunction8<A, B, C, D, E, F, G, H> {
+    void apply(A _0, B _1, C _2, D _3, E _4, F _5, G _6, H _7);
+  }
+
+
+  public interface Function9<A, B, C, D, E, F, G, H, J, Out> {
+    Out apply(A _0, B _1, C _2, D _3, E _4, F _5, G _6, H _7, J _8);
+  }
+
+  public interface VFunction9<A, B, C, D, E, F, G, H, J> {
+    void apply(A _0, B _1, C _2, D _3, E _4, F _5, G _6, H _7, J _8);
+  }
 }
