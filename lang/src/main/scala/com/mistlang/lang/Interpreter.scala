@@ -90,18 +90,6 @@ object Interpreter extends {
   }
 }
 
-sealed trait RuntimeValue
-
-object RuntimeValue {
-  case class FuncVal(numArgs: Option[Int], f: List[RuntimeValue] => RuntimeValue) extends RuntimeValue
-  case object UnitVal extends RuntimeValue
-  case class IntVal(value: Int) extends RuntimeValue
-  case class BoolVal(value: Boolean) extends RuntimeValue
-  case class StrVal(value: String) extends RuntimeValue
-  case class TupleVal(arr: List[RuntimeValue]) extends RuntimeValue
-
-}
-
 object RuntimeInterpreter {
 
   val env = RuntimeIntrinsics.intrinsics.foldLeft(Env.empty[RuntimeValue]) { case (curEnv, (name, f)) =>

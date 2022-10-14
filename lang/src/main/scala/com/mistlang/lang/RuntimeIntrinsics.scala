@@ -39,7 +39,6 @@ object RuntimeIntrinsics {
     "-" -> f2[Int, Int]((a, b) => a - b),
     "*" -> f2[Int, Int]((a, b) => a * b),
     "==" -> f2[Any, Any]((a, b) => a == b),
-    "Tuple" -> FuncVal(None, (l: List[RuntimeValue]) => TupleVal(l)),
     "at" -> FuncVal(
       Some(2),
       (l: List[RuntimeValue]) => {
@@ -53,15 +52,6 @@ object RuntimeIntrinsics {
       (l: List[RuntimeValue]) => {
         val t = as[TupleVal](l.head)
         TupleVal(t.arr :+ l(1))
-      }
-    ),
-    "if" -> FuncVal(
-      Some(3),
-      (l: List[RuntimeValue]) => {
-        val cond = as[BoolVal](l.head)
-        val succ = as[FuncVal](l(1))
-        val fail = as[FuncVal](l(2))
-        if (cond.value) succ.f(Nil) else fail.f(Nil)
       }
     )
   )

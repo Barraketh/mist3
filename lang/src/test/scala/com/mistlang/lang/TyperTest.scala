@@ -8,7 +8,7 @@ object TyperTest extends TestSuite {
 
   def run(s: String): Type = {
     val e = parser.parse(s)
-    typer.eval(TyperEnv.env, e).last.tpe
+    typer.eval(TypeEnv.env, e).last.tpe.t
   }
 
   val tests = Tests {
@@ -47,6 +47,21 @@ object TyperTest extends TestSuite {
       assert(run(code("Int", Some("Int"))) == Type.IntType)
       intercept[TypeError](run(code("Any", Some("Int"))))
       intercept[RuntimeException](run(code("Int", None)))
+    }
+    test("Type tuples") {
+      def code(idx: Int): String = {
+        s"""
+         def foo(a: String) = a
+         
+         val t = #["foo", 1, "baz"]
+         val index = +(0, $idx)
+         val b = at(t, index)
+         foo(b)
+         """.stripMargin
+      }
+
+      assert(run(code(0)) == Type.StrType)
+      intercept[TypeError](run(code(1)))
     }
   }
 

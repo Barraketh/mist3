@@ -1,19 +1,14 @@
 package com.mistlang.lang
 
 class Env[T](map: Map[String, ValueHolder[T]], parent: Option[Env[T]]) {
-  def put(name: String, value: T): Env[T] = {
+  private def put(name: String, value: ValueHolder[T]): Env[T] = {
     if (map.contains(name))
       throw new RuntimeException(s"$name already defined")
-
-    new Env(map + (name -> Strict(value)), parent)
+    new Env(map + (name -> value), parent)
   }
+  def put(name: String, value: T): Env[T] = put(name, Strict(value))
 
-  def putLazy(name: String, value: () => T): Env[T] = {
-    if (map.contains(name))
-      throw new RuntimeException(s"$name already defined")
-
-    new Env(map + (name -> new Lazy(value)), parent)
-  }
+  def putLazy(name: String, value: () => T): Env[T] = put(name, new Lazy[T](value))
 
   def putTopLevel(toPut: Iterable[(String, Env[T] => T)]): Env[T] = {
     var nextEnv = this

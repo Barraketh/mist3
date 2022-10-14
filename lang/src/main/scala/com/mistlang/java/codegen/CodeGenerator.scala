@@ -1,29 +1,37 @@
 package com.mistlang.java.codegen
 
-import com.mistlang.lang.Type.{FuncType, TupleType, UnitType}
+import com.mistlang.lang.RuntimeValue.IntVal
+import com.mistlang.lang.Type.{BasicFuncType, FuncType, TupleType, UnitType}
 import com.mistlang.lang.TypedAst._
-import com.mistlang.lang.{Type, TypedAst}
+import com.mistlang.lang.{TaggedType, Type, TypedAst}
 
 object CodeGenerator {
 
-  private def compileType(tpe: Type): String = {
-    tpe match {
+  private def compileType(tpe: TaggedType): String = {
+    tpe.t match {
       case Type.IntType   => "Integer"
       case Type.StrType   => "String"
       case Type.BoolType  => "Boolean"
       case Type.UnitType  => "void"
       case Type.AnyType   => "Object"
       case TupleType(arr) => s"Tuple${arr.length}<${arr.map(compileType).mkString(", ")}>"
-      case f: FuncType    => compileFunctionType(f)
+      case f: FuncType =>
+        f match {
+          case b: BasicFuncType      => compileFunctionType(b)
+          case _: Type.TypelevelFunc => ???
+        }
     }
   }
 
-  private def compileFunctionType(func: FuncType): String = {
+  private def isUnit(tpe: TaggedType): Boolean = tpe.t == UnitType
+  private def getType[T <: Type](tpe: TaggedType): T = tpe.t.asInstanceOf[T]
+
+  private def compileFunctionType(func: BasicFuncType): String = {
     val argTypes = func.args.map(a => compileType(a.tpe))
     val outType = compileType(func.outType)
 
-    val genericParams = if (func.outType == UnitType) argTypes else argTypes :+ outType
-    val classPrefix = if (func.outType == UnitType) "VFunction" else "Function"
+    val genericParams = if (isUnit(func.outType)) argTypes else argTypes :+ outType
+    val classPrefix = if (isUnit(func.outType)) "VFunction" else "Function"
     s"${classPrefix}${func.args.length}<${genericParams.mkString(", ")}>"
   }
 
@@ -34,9 +42,10 @@ object CodeGenerator {
       case i: Ident if binaryOperators.contains(i.name) =>
         s"(${compile(c.args.head)} ${i.name} ${compile(c.args(1))})"
       case i: Ident if i.name == "at" =>
-        s"${compile(c.args.head)}._${c.args(1).asInstanceOf[Literal].value}"
+        s"${compile(c.args.head)}._${c.args(1).tpe.tags("value").asInstanceOf[IntVal].value}()"
       case _ =>
-        val apply = if (c.func.tpe.asInstanceOf[FuncType].isLambda) ".apply" else ""
+        val funcType = getType[BasicFuncType](c.func.tpe)
+        val apply = if (funcType.isLambda) ".apply" else ""
         s"""${compile(c.func)}$apply(${c.args.map(compile).mkString(", ")})"""
     }
   }
@@ -44,13 +53,13 @@ object CodeGenerator {
   private def compileDefs(stmts: List[TypedAst]): String =
     stmts.collect { case d: Def => compile(d) }.mkString("\n")
 
-  private def compileNonDefs(stmts: List[TypedAst]): (String, Type) = {
+  private def compileNonDefs(stmts: List[TypedAst]): (String, TaggedType) = {
     val nonDefStmts = stmts.filter {
       case _: Def => false
       case _      => true
     }
     val nonDefs = nonDefStmts.map(compile).map(_ + ";")
-    val addReturn = nonDefStmts.last.tpe != UnitType
+    val addReturn = !isUnit(nonDefStmts.last.tpe)
 
     val withReturn = if (addReturn) {
       (nonDefs.reverse match {
@@ -64,10 +73,7 @@ object CodeGenerator {
 
   private def compileBlock(b: Block): String = {
     val tpeName = compileType(b.tpe)
-    val funcName = b.tpe match {
-      case UnitType => "VFunction0"
-      case _        => s"Function0<$tpeName>"
-    }
+    val funcName = if (isUnit(b.tpe)) "VFunction0" else s"Function0<$tpeName>"
     s"""new $funcName() {
        |  ${compileDefs(b.stmts)}
        |
@@ -77,7 +83,8 @@ object CodeGenerator {
        |}.apply()""".stripMargin
   }
   private def compileFunc(name: String, func: Lambda): String = {
-    val compiledArgs = func.tpe.args.map(a => s"${compileType(a.tpe)} ${a.name}").mkString(", ")
+    val funcType = getType[BasicFuncType](func.tpe)
+    val compiledArgs = funcType.args.map(a => s"${compileType(a.tpe)} ${a.name}").mkString(", ")
     val compiledBody = func.body match {
       case b: Block if !(b.stmts.exists {
             case _: Def => true
@@ -86,7 +93,7 @@ object CodeGenerator {
         compileNonDefs(b.stmts)._1
       case other => "return " + compile(other) + ";"
     }
-    s"""public ${compileType(func.tpe.outType)} ${name}($compiledArgs) {
+    s"""public ${compileType(funcType.outType)} ${name}($compiledArgs) {
        |  $compiledBody
        |}""".stripMargin
   }
@@ -94,11 +101,15 @@ object CodeGenerator {
   private def compileIf(i: If): String =
     s"""((${compile(i.expr)}) ? ${compile(i.success)} : ${compile(i.fail)})"""
 
-  private def compileTuple(t: Tuple): String =
-    s"new Tuple${t.exprs.length}(${t.exprs.map(compile).mkString(", ")})"
+  private def compileTuple(t: Tuple): String = {
+    val tupleType = getType[TupleType](t.tpe)
+    val genericTypes = tupleType.arr.map(compileType).mkString(", ")
+    s"new Tuple${t.exprs.length}<$genericTypes>(${t.exprs.map(compile).mkString(", ")})"
+  }
 
   private def compileLambda(l: Lambda): String = {
-    s"""(new ${compileFunctionType(l.tpe)} () {
+    val funcType = getType[BasicFuncType](l.tpe)
+    s"""(new ${compileFunctionType(funcType)} () {
        |  ${compileFunc("apply", l)}
        |})""".stripMargin
   }

@@ -16,7 +16,7 @@ object JavaCodeGeneratorTest extends TestSuite {
 
   def run(s: String) = {
     val e = parser.parse(s)
-    val typed = typer.eval(TyperEnv.env, e)
+    val typed = typer.eval(TypeEnv.env, e)
     val c = gen.compile(typed, Nil, "MyClass")
     println(c)
 
@@ -92,10 +92,17 @@ object JavaCodeGeneratorTest extends TestSuite {
       assert(run(code) == 8)
     }
     test("Tuples") {
-      val code =
-        """#[3, "Foo", true]""".stripMargin
-
-      assert(run(code) == new com.mistlang.java.stdlib.Tuples.Tuple3(3, "Foo", true))
+      assert(
+        run(
+          """
+             def add3(a: Int) = +(a, 3)
+            val a = #[ "3", "5", 6 ]
+            val idx0 = 1
+            val index = +(idx0, 1)
+            add3(at(a, index))
+          """
+        ) == 9
+      )
     }
     test("Function References") {
       assert(
