@@ -69,11 +69,9 @@ object Grammar {
 
   def stmt[_: P] = P(valP | defP | expr)
 
-  def stmtWP[_: P] = P(stmt ~ "\n".rep)
-
   def block[_: P] = P("{" ~/ stmts ~ "}").map(stmts => Block(stmts))
 
-  def stmts[_: P] = P("\n".rep ~ stmtWP.rep).map(_.toList)
+  def stmts[_: P] = P("\n".rep ~ stmt.rep(0, "\n".rep(1)) ~ "\n".rep).map(_.toList)
 
   def allStmts[_: P] = P(stmts ~ End)
 }
