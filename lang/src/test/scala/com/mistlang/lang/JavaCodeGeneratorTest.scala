@@ -36,7 +36,7 @@ object JavaCodeGeneratorTest extends TestSuite {
 
   val tests = Tests {
     test("Test arithm") {
-      val s = "+(3, *(2, 6))"
+      val s = "2 * 6 + 3"
       val res = run(s)
       assert(res == 15)
     }
@@ -47,7 +47,7 @@ object JavaCodeGeneratorTest extends TestSuite {
           """{
             | val a = 3
             | val b = 6
-            | +(a, b)
+            | a + b
             |}""".stripMargin
         ) == 9
       )
@@ -58,9 +58,9 @@ object JavaCodeGeneratorTest extends TestSuite {
             | val a = 3
             | val b = {
             |   val a = 7
-            |   +(a, 3)
+            |   a + 3
             | }
-            | +(a, b)
+            | a + b
             |}""".stripMargin
         ) == 13
       )
@@ -70,9 +70,9 @@ object JavaCodeGeneratorTest extends TestSuite {
           """{
             |val a = 3
             |val b = {
-            | +(a, 6)
+            | a + 6
             |}
-            |+(a, b)
+            |a + b
             |}""".stripMargin
         ) == 12
       )
@@ -81,9 +81,9 @@ object JavaCodeGeneratorTest extends TestSuite {
       val code =
         s"""{
        def fib(n: Int): Int = {
-         if (==(n, 0)) 0
-         else if (==(n, 1)) 1
-         else +( fib(-(n,1)), fib(-(n,2)) )
+         if (n == 0) 0
+         else if (n == 1) 1
+         else fib(n - 1) + fib(n - 2)
        }
 
        fib(6)
@@ -95,10 +95,10 @@ object JavaCodeGeneratorTest extends TestSuite {
       assert(
         run(
           """
-             def add3(a: Int) = +(a, 3)
+             def add3(a: Int) = a + 3
             val a = #[ "3", "5", 6 ]
             val idx0 = 1
-            val index = +(idx0, 1)
+            val index = idx0 + 1
             add3(at(a, index))
           """
         ) == 9
@@ -108,7 +108,7 @@ object JavaCodeGeneratorTest extends TestSuite {
       assert(
         run(
           """
-            |def add3(i: Int) = +(i, 3)
+            |def add3(i: Int) = i + 3
             |
             |val a = add3
             |a(3)

@@ -10,7 +10,7 @@ object Ast {
   case class Ident(name: String) extends Expr
   case class Tuple(exprs: List[Expr]) extends Expr
   case class Block(stmts: List[Ast]) extends Expr
-  case class Call(func: Expr, args: List[Expr]) extends Expr
+  case class Call(func: Expr, args: List[Expr], isInfixCall: Boolean = false) extends Expr
   case class Lambda(args: List[ArgDecl], outType: Option[Expr], body: Expr, name: Option[String]) extends Expr
   case class If(expr: Expr, success: Expr, fail: Expr) extends Expr
 

@@ -13,7 +13,7 @@ object TyperTest extends TestSuite {
 
   val tests = Tests {
     test("Intrinsic params") {
-      def code(param: String) = s"+($param, 3)"
+      def code(param: String) = s"3 + $param"
 
       assert(run(code("1")) == Type.IntType)
       intercept[TypeError](run(code("\"foo\"")))
@@ -35,9 +35,9 @@ object TyperTest extends TestSuite {
       def code(inParam: String, outParam: Option[String]) = {
         s"""{
           def fib(n : $inParam)${outParam.map(o => s":$o").getOrElse("")} => {
-            if (==(n, 0)) 0
-            else if (==(n, 1)) 1
-            else +( fib(-(n,1)), fib(-(n,2)) )
+            if (n == 0) 0
+            else if (n == 1) 1
+            else fib(n - 1) + fib(n - 2)
           }
 
           fib(6)
@@ -54,7 +54,7 @@ object TyperTest extends TestSuite {
          def foo(a: String) = a
          
          val t = #["foo", 1, "baz"]
-         val index = +(0, $idx)
+         val index = 0 + $idx
          val b = at(t, index)
          foo(b)
          """.stripMargin

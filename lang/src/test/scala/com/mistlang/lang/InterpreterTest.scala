@@ -14,9 +14,9 @@ object InterpreterTest extends TestSuite {
 
   val tests = Tests {
     test("Test arithm") {
-      val s = "+(3, *(2, 6))"
+      val s = "3 * 2 + 3"
       val res = run(s)
-      assert(res == IntVal(15))
+      assert(res == IntVal(9))
     }
 
     test("Block") {
@@ -25,7 +25,7 @@ object InterpreterTest extends TestSuite {
           """{
             | val a = 3
             | val b = 6
-            | +(a, b)
+            | a + b
             |}""".stripMargin
         ) == IntVal(9)
       )
@@ -36,9 +36,9 @@ object InterpreterTest extends TestSuite {
             | val a = 3
             | val b = {
             |   val a = 7
-            |   +(a, 3)
+            |   a + 3
             | }
-            | +(a, b)
+            | a + b
             |}""".stripMargin
         ) == IntVal(13)
       )
@@ -48,9 +48,9 @@ object InterpreterTest extends TestSuite {
           """{
             |val a = 3
             |val b = {
-            | +(a, 6)
+            | a + 6
             |}
-            |+(a, b)
+            |a + b
             |}""".stripMargin
         ) == IntVal(12)
       )
@@ -77,9 +77,9 @@ object InterpreterTest extends TestSuite {
       assert(run {
         """{
           def fib(n : Any) => {
-            if (==(n, 0)) 0
-            else if (==(n, 1)) 1
-            else +( fib(-(n,1)), fib(-(n,2)) )
+            if (n == 0) 0
+            else if (n == 1) 1
+            else fib(n - 1) + fib(n - 2)
           }
 
           fib(6)
