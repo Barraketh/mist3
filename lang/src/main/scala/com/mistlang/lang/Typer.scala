@@ -8,36 +8,9 @@ import com.mistlang.lang.TypedAst.Synthetic
 case class TypeError(msg: String) extends RuntimeException(msg)
 
 object Typer {
-
   def error(msg: String) = throw TypeError(msg)
 
-  def evalLiteral(l: Literal): TypedAst.Expr = {
-    val tpe = l.value match {
-      case i: Int     => TaggedType(IntType, "value" -> IntVal(i))
-      case b: Boolean => TaggedType(BoolType, "value" -> BoolVal(b))
-      case s: String  => TaggedType(StrType, "value" -> StrVal(s))
-    }
-    TypedAst.Literal(l.value, tpe)
-  }
-
-  def evalIdent(env: TypeEnv, i: Ident): TypedAst.Expr = {
-    val t = env.typeEnv.get(i.name).getOrElse {
-      error(s"${i.name} not found")
-    }
-    TypedAst.Ident(i.name, t.tpe)
-  }
-
-  def evalTuple(env: TypeEnv, t: Tuple): TypedAst.Expr = {
-    val typedExprs = t.exprs.map(c => evalExp(env, c))
-    TypedAst.Tuple(typedExprs, TaggedType(TupleType(typedExprs.map(_.tpe))))
-  }
-
-  def evalBlock(env: TypeEnv, b: Block): TypedAst.Expr = {
-    val typedStmts = eval(env.newScope, b.stmts)
-    TypedAst.Block(typedStmts, typedStmts.lastOption.map(_.tpe).getOrElse(TaggedType.unitType))
-  }
-
-  private def checkArg(name: String, expected: TaggedType, actual: TaggedType): Unit = {
+  def checkArg(name: String, expected: TaggedType, actual: TaggedType): Unit = {
     (expected.t, actual.t) match {
       case (AnyType, _)     => ()
       case (e, a) if e == a => ()
@@ -47,6 +20,32 @@ object Typer {
       case _ =>
         error(s"Type mismatch for $name - expected $expected, got $actual")
     }
+  }
+
+  private def evalLiteral(l: Literal): TypedAst.Expr = {
+    val tpe = l.value match {
+      case i: Int     => TaggedType(IntType, "value" -> IntVal(i))
+      case b: Boolean => TaggedType(BoolType, "value" -> BoolVal(b))
+      case s: String  => TaggedType(StrType, "value" -> StrVal(s))
+    }
+    TypedAst.Literal(l.value, tpe)
+  }
+
+  private def evalIdent(env: TypeEnv, i: Ident): TypedAst.Expr = {
+    val t = env.typeEnv.get(i.name).getOrElse {
+      error(s"${i.name} not found")
+    }
+    TypedAst.Ident(i.name, t.tpe)
+  }
+
+  private def evalTuple(env: TypeEnv, t: Tuple): TypedAst.Expr = {
+    val typedExprs = t.exprs.map(c => evalExp(env, c))
+    TypedAst.Tuple(typedExprs, TaggedType(TupleType(typedExprs.map(_.tpe))))
+  }
+
+  private def evalBlock(env: TypeEnv, b: Block): TypedAst.Expr = {
+    val typedStmts = eval(env.newScope, b.stmts)
+    TypedAst.Block(typedStmts, typedStmts.lastOption.map(_.tpe).getOrElse(TaggedType.unitType))
   }
 
   private def evalLambda(env: TypeEnv, f: Lambda): TypedAst.Expr = {
@@ -73,20 +72,9 @@ object Typer {
     val fTyped = evalExp(env, c.func)
     fTyped.tpe.t match {
       case f: FuncType =>
-        if (f.args.length != c.args.length)
-          error(s"Unexpected number of args - expected ${f.args.length}, got ${c.args.length}")
-
         val resolvedTypes = c.args.map(e => evalExp(env, e))
-        f.args.zip(resolvedTypes).foreach { case (arg, actual) =>
-          checkArg(arg.name, arg.tpe, actual.tpe)
-        }
-        val outType = f match {
-          case BasicFuncType(_, outType, _) => outType
-          case TypelevelFunc(_, f)          => f.apply(resolvedTypes.map(_.tpe))
-        }
-
+        val outType = f.f(resolvedTypes.map(_.tpe))
         TypedAst.Call(fTyped, resolvedTypes, outType)
-
       case other => error(s"Cannot call $other")
     }
   }

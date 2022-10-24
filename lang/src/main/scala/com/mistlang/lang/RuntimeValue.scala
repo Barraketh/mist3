@@ -1,6 +1,6 @@
 package com.mistlang.lang
 
-import com.mistlang.lang.Type.{AnyType, Arg, BasicFuncType, BoolType, IntType, StrType, TypelevelFunc, UnitType}
+import com.mistlang.lang.Type._
 
 sealed trait RuntimeValue
 
@@ -28,8 +28,8 @@ object TaggedType {
   def basicFuncType(args: List[Arg], outType: TaggedType, isLambda: Boolean) =
     TaggedType(BasicFuncType(args, outType, isLambda))
 
-  def typeLevelFunc(args: List[Arg], f: List[TaggedType] => TaggedType) =
-    TaggedType(TypelevelFunc(args, f))
+  def typeLevelFunc(f: List[TaggedType] => TaggedType) =
+    TaggedType(TypelevelFunc(f))
 }
 
 sealed trait Type
@@ -45,9 +45,17 @@ object Type {
 
   case class Arg(name: String, tpe: TaggedType)
   sealed trait FuncType extends Type {
-    def args: List[Arg]
+    def f: List[TaggedType] => TaggedType
   }
-  case class BasicFuncType(args: List[Arg], outType: TaggedType, isLambda: Boolean) extends FuncType
-  case class TypelevelFunc(args: List[Arg], f: List[TaggedType] => TaggedType) extends FuncType
+  case class BasicFuncType(args: List[Arg], outType: TaggedType, isLambda: Boolean) extends FuncType {
+    override def f: List[TaggedType] => TaggedType = (l: List[TaggedType]) => {
+      if (l.length != args.length)
+        Typer.error(s"Unexpected number of args - expected ${args.length}, got ${l.length}")
+
+      args.zip(l).foreach { case (arg, actual) => Typer.checkArg(arg.name, arg.tpe, actual) }
+      outType
+    }
+  }
+  case class TypelevelFunc(f: List[TaggedType] => TaggedType) extends FuncType
 
 }
