@@ -42,7 +42,7 @@ object Grammar {
 
   def ident[_: P] = name.map(s => Ident(s))
 
-  def tuple[_: P] = P("#[" ~/ expr.rep(0, ",") ~ "]").map(l => Tuple(l.toList))
+  def tuple[_: P] = P("#[" ~/ expr.rep(0, ",") ~ "]").map(l => Call(Ident("mkTuple"), l.toList))
 
   def term[_: P]: P[Expr] = P(str | int | bool | tuple | lambda | ifP | ident | block)
 

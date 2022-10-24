@@ -85,7 +85,6 @@ object Interpreter extends {
     case c: Call         => evalCall(env, c)
     case b: Block        => evalBlock(env, b)
     case i: If           => evalIf(env, i)
-    case Tuple(children) => TupleVal(children.map(t => evalExp(env, t)))
 
   }
 }

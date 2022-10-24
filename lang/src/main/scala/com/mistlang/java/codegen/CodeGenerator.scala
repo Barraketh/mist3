@@ -41,6 +41,7 @@ object CodeGenerator {
     c.func match {
       case i: Ident if binaryOperators.contains(i.name) =>
         s"(${compile(c.args.head)} ${i.name} ${compile(c.args(1))})"
+      case i: Ident if i.name == "mkTuple" => compileTuple(c)
       case i: Ident if i.name == "at" =>
         s"${compile(c.args.head)}._${c.args(1).tpe.tags("value").asInstanceOf[IntVal].value}()"
       case _ =>
@@ -101,10 +102,10 @@ object CodeGenerator {
   private def compileIf(i: If): String =
     s"""((${compile(i.expr)}) ? ${compile(i.success)} : ${compile(i.fail)})"""
 
-  private def compileTuple(t: Tuple): String = {
-    val tupleType = getType[TupleType](t.tpe)
+  private def compileTuple(c: Call): String = {
+    val tupleType = getType[TupleType](c.tpe)
     val genericTypes = tupleType.arr.map(compileType).mkString(", ")
-    s"new Tuple${t.exprs.length}<$genericTypes>(${t.exprs.map(compile).mkString(", ")})"
+    s"new Tuple${c.args.length}<$genericTypes>(${c.args.map(compile).mkString(", ")})"
   }
 
   private def compileLambda(l: Lambda): String = {
@@ -123,7 +124,6 @@ object CodeGenerator {
             case _         => value.toString
           }
         case Ident(name, _) => name
-        case t: Tuple       => compileTuple(t)
         case b: Block       => compileBlock(b)
         case c: Call        => compileCall(c)
         case l: Lambda      => compileLambda(l)

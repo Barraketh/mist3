@@ -38,11 +38,6 @@ object Typer {
     TypedAst.Ident(i.name, t.tpe)
   }
 
-  private def evalTuple(env: TypeEnv, t: Tuple): TypedAst.Expr = {
-    val typedExprs = t.exprs.map(c => evalExp(env, c))
-    TypedAst.Tuple(typedExprs, TaggedType(TupleType(typedExprs.map(_.tpe))))
-  }
-
   private def evalBlock(env: TypeEnv, b: Block): TypedAst.Expr = {
     val typedStmts = eval(env.newScope, b.stmts)
     TypedAst.Block(typedStmts, typedStmts.lastOption.map(_.tpe).getOrElse(TaggedType.unitType))
@@ -113,7 +108,6 @@ object Typer {
     ast match {
       case l: Literal => evalLiteral(l)
       case i: Ident   => evalIdent(env, i)
-      case t: Tuple   => evalTuple(env, t)
       case b: Block   => evalBlock(env, b)
       case c: Call    => evalCall(env, c)
       case i: If      => evalIf(env, i)

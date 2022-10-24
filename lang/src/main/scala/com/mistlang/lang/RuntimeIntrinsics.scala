@@ -39,6 +39,12 @@ object RuntimeIntrinsics {
     "-" -> f2[Int, Int]((a, b) => a - b),
     "*" -> f2[Int, Int]((a, b) => a * b),
     "==" -> f2[Any, Any]((a, b) => a == b),
+    "mkTuple" -> FuncVal(
+      None,
+      (l: List[RuntimeValue]) => {
+        TupleVal(l)
+      }
+    ),
     "at" -> FuncVal(
       Some(2),
       (l: List[RuntimeValue]) => {

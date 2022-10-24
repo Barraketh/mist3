@@ -34,6 +34,7 @@ object TyperIntrinsics {
     "-" -> typeLevelFunc(args => reduceIntValues(args, (a, b) => a - b)),
     "*" -> typeLevelFunc(args => reduceIntValues(args, (a, b) => a * b)),
     "+" -> typeLevelFunc(args => reduceIntValues(args, (a, b) => a + b)),
+    "mkTuple" -> typeLevelFunc(args => TaggedType(TupleType(args))),
     "at" -> typeLevelFunc((args: List[TaggedType]) => {
       if (args.length != 2)
         Typer.error(s"unexpected number of args - expected two, got ${args.length}")
