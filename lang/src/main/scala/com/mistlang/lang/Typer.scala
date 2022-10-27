@@ -3,7 +3,7 @@ package com.mistlang.lang
 import com.mistlang.lang.Ast._
 import com.mistlang.lang.RuntimeValue.{BoolVal, IntVal, StrVal}
 import com.mistlang.lang.Type._
-import com.mistlang.lang.TypedAst.Synthetic
+import com.mistlang.lang.TypedAst.{Lazy, Synthetic}
 
 case class TypeError(msg: String) extends RuntimeException(msg)
 
@@ -35,7 +35,11 @@ object Typer {
     val t = env.typeEnv.get(i.name).getOrElse {
       error(s"${i.name} not found")
     }
-    TypedAst.Ident(i.name, t.tpe)
+    val isLazy = t match {
+      case _: Lazy => true
+      case _       => false
+    }
+    TypedAst.Ident(i.name, t.tpe, isLazy)
   }
 
   private def evalBlock(env: TypeEnv, b: Block): TypedAst.Expr = {
@@ -93,7 +97,7 @@ object Typer {
     val nextExpr = resolved.tpe.t match {
       case f: BasicFuncType if !f.isLambda =>
         TypedAst.Lambda(
-          TypedAst.Call(resolved, f.args.map(a => TypedAst.Ident(a.name, a.tpe)), f.outType),
+          TypedAst.Call(resolved, f.args.map(a => TypedAst.Ident(a.name, a.tpe, false)), f.outType),
           TaggedType(f.copy(isLambda = true))
         )
       case _ => resolved
@@ -102,7 +106,7 @@ object Typer {
   }
 
   private def evalDef(env: TypeEnv, d: Def): TypedAst =
-    TypedAst.Def(d.name, env.typeEnv.get(d.name).get.asInstanceOf[TypedAst.Lambda], TaggedType.unitType)
+    TypedAst.Def(d.name, env.typeEnv.get(d.name).get, TaggedType.unitType)
 
   def evalExp(env: TypeEnv, ast: Expr): TypedAst.Expr = {
     ast match {
@@ -121,7 +125,13 @@ object Typer {
       case _      => false
     }
     val topLevel = defs.collect { case d: Def =>
-      d.name -> ((curEnv: TypeEnv) => evalExp(curEnv, d.func))
+      d.name -> ((curEnv: TypeEnv) => {
+        val resolved = evalExp(curEnv, d.expr)
+        d.expr match {
+          case _: Ast.Lambda => resolved
+          case _             => Lazy(resolved)
+        }
+      })
     }
     val topLevelEnv = env.putTopLevel(topLevel)
 

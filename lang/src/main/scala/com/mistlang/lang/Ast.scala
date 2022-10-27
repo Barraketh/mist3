@@ -14,5 +14,5 @@ object Ast {
   case class If(expr: Expr, success: Expr, fail: Expr) extends Expr
 
   case class Val(name: String, expr: Expr) extends Ast
-  case class Def(name: String, func: Lambda) extends Ast
+  case class Def(name: String, expr: Expr) extends Ast
 }

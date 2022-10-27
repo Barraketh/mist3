@@ -63,7 +63,7 @@ object Interpreter extends {
       case _      => false
     }
     val topLevel = defs.collect { case d: Def =>
-      d.name -> ((curEnv: RuntimeEnv) => evalExp(curEnv, d.func))
+      d.name -> ((curEnv: RuntimeEnv) => evalExp(curEnv, d.expr))
     }
     val topLevelEnv = newEnv.putTopLevel(topLevel)
     others
@@ -79,12 +79,12 @@ object Interpreter extends {
   }
 
   def evalExp(env: RuntimeEnv, e: Expr): RuntimeValue = e match {
-    case l: Literal      => evalLiteral(l)
-    case i: Ident        => env.get(i.name).getOrElse(error(s"${i.name} not found"))
-    case l: Lambda       => evalLambda(env, l)
-    case c: Call         => evalCall(env, c)
-    case b: Block        => evalBlock(env, b)
-    case i: If           => evalIf(env, i)
+    case l: Literal => evalLiteral(l)
+    case i: Ident   => env.get(i.name).getOrElse(error(s"${i.name} not found"))
+    case l: Lambda  => evalLambda(env, l)
+    case c: Call    => evalCall(env, c)
+    case b: Block   => evalBlock(env, b)
+    case i: If      => evalIf(env, i)
 
   }
 }

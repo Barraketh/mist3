@@ -83,19 +83,32 @@ object CodeGenerator {
        |  }
        |}.apply()""".stripMargin
   }
-  private def compileFunc(name: String, func: Lambda): String = {
-    val funcType = getType[BasicFuncType](func.tpe)
-    val compiledArgs = funcType.args.map(a => s"${compileType(a.tpe)} ${a.name}").mkString(", ")
-    val compiledBody = func.body match {
-      case b: Block if !(b.stmts.exists {
-            case _: Def => true
-            case _      => false
-          }) =>
-        compileNonDefs(b.stmts)._1
-      case other => "return " + compile(other) + ";"
+  private def compileFunc(name: String, expr: Expr): String = {
+    val (outType, args, body) = expr match {
+      case func: Lambda =>
+        val funcType = getType[BasicFuncType](func.tpe)
+        val compiledArgs = funcType.args.map(a => s"${compileType(a.tpe)} ${a.name}").mkString(", ")
+        val compiledBody = func.body match {
+          case b: Block if !(b.stmts.exists {
+                case _: Def => true
+                case _      => false
+              }) =>
+            compileNonDefs(b.stmts)._1
+          case other => "return " + compile(other) + ";"
+        }
+        (funcType.outType, compiledArgs, compiledBody)
+      case expr: Expr =>
+        val outType = expr.tpe
+        val args = ""
+        val body =
+          s"""{
+             |  return ${compile(expr)};
+             |}
+             |""".stripMargin
+        (outType, args, body)
     }
-    s"""public ${compileType(funcType.outType)} ${name}($compiledArgs) {
-       |  $compiledBody
+    s"""public ${compileType(outType)} ${name}($args) {
+       |  $body
        |}""".stripMargin
   }
 
@@ -115,6 +128,11 @@ object CodeGenerator {
        |})""".stripMargin
   }
 
+  private def compileIdent(i: Ident): String = {
+    if (i.isLazy) i.name + "()"
+    else i.name
+  }
+
   def compile(ast: TypedAst): String = ast match {
     case expr: Expr =>
       expr match {
@@ -123,15 +141,16 @@ object CodeGenerator {
             case _: String => "\"" + value + "\""
             case _         => value.toString
           }
-        case Ident(name, _) => name
-        case b: Block       => compileBlock(b)
-        case c: Call        => compileCall(c)
-        case l: Lambda      => compileLambda(l)
-        case i: If          => compileIf(i)
-        case s: Synthetic   => ""
+        case i: Ident     => compileIdent(i)
+        case b: Block     => compileBlock(b)
+        case c: Call      => compileCall(c)
+        case l: Lambda    => compileLambda(l)
+        case i: If        => compileIf(i)
+        case l: Lazy      => compile(l.expr)
+        case s: Synthetic => ""
       }
     case v: Val => s"var ${v.name} = ${compile(v.expr)}"
-    case d: Def => compileFunc(d.name, d.func)
+    case d: Def => compileFunc(d.name, d.expr)
 
   }
 

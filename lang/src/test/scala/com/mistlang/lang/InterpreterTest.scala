@@ -76,7 +76,7 @@ object InterpreterTest extends TestSuite {
     test("Recursion") {
       assert(run {
         """{
-          def fib(n : Any) => {
+          def fib = fn(n : Any) => {
             if (n == 0) 0
             else if (n == 1) 1
             else fib(n - 1) + fib(n - 2)
@@ -95,6 +95,19 @@ object InterpreterTest extends TestSuite {
           at(a, 1)
           """.stripMargin
         ) == IntVal(5)
+      )
+    }
+
+    test("Expr defs") {
+      assert(
+        run(
+          """
+            |def a = b + 3
+            |def b = 4
+            |
+            |a
+            |""".stripMargin
+        ) == IntVal(7)
       )
     }
   }

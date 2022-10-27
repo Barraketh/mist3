@@ -79,20 +79,23 @@ object Grammar {
     )
   }
 
-  def valP[_: P] = P("val" ~/ name ~ "=" ~ expr).map { case (n, e) => Val(n, e) }
+  def valP[_: P] = P("val " ~/ name ~ "=" ~ expr).map { case (n, e) => Val(n, e) }
+  def defP[_: P] = P("def " ~/ name ~ "=" ~ expr).map { case (n, e) =>
+    val expr = e match {
+      case l: Lambda => l.copy(name = Some(n))
+      case other     => other
+    }
+    Def(n, expr)
+  }
 
   def argDecl[_: P] = P(name ~/ ":" ~ expr).map(ArgDecl.tupled)
 
   def argDeclList[_: P] = P("(" ~/ argDecl.rep(0, ",") ~ ")").map(_.toList)
 
-  def funcData[_: P] = P(argDeclList ~ (":" ~ expr).? ~ ("=>" | "=") ~ expr)
+  def funcData[_: P] = P(argDeclList ~ (":" ~ expr).? ~ "=>" ~ expr)
   def lambda[_: P] = P("fn" ~/ funcData).map { case (args, outType, body) =>
     Lambda(args, outType, body, None)
   }
-  def defP[_: P] = P("def" ~/ name ~/ funcData).map { case (name, (args, outType, body)) =>
-    Def(name, Lambda(args, outType, body, Some(name)))
-  }
-
   def stmt[_: P] = P(valP | defP | expr)
 
   def block[_: P] = P("{" ~/ stmts ~ "}").map(stmts => Block(stmts))

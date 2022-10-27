@@ -21,7 +21,7 @@ object TyperTest extends TestSuite {
     test("Regular function params") {
       def code(param: String) = {
         s"""
-            def foo(a: Int, b: String) = a
+            def foo = fn(a: Int, b: String) => a
             foo($param, "s")
           """
       }
@@ -34,7 +34,7 @@ object TyperTest extends TestSuite {
     test("Recursion") {
       def code(inParam: String, outParam: Option[String]) = {
         s"""{
-          def fib(n : $inParam)${outParam.map(o => s":$o").getOrElse("")} => {
+          def fib = fn(n : $inParam)${outParam.map(o => s":$o").getOrElse("")} => {
             if (n == 0) 0
             else if (n == 1) 1
             else fib(n - 1) + fib(n - 2)
@@ -51,7 +51,7 @@ object TyperTest extends TestSuite {
     test("Type tuples") {
       def code(idx: Int): String = {
         s"""
-         def foo(a: String) = a
+         def foo = fn(a: String) => a
          
          val t = #["foo", 1, "baz"]
          val index = 0 + $idx
@@ -62,6 +62,18 @@ object TyperTest extends TestSuite {
 
       assert(run(code(0)) == Type.StrType)
       intercept[TypeError](run(code(1)))
+    }
+    test("Expr defs") {
+      assert(
+        run(
+          """
+            |def a = b + 3
+            |def b = 4
+            |
+            |a
+            |""".stripMargin
+        ) == Type.IntType
+      )
     }
   }
 

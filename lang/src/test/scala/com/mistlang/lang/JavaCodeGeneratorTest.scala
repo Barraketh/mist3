@@ -80,7 +80,7 @@ object JavaCodeGeneratorTest extends TestSuite {
     test("Recursion") {
       val code =
         s"""{
-       def fib(n: Int): Int = {
+       def fib = fn(n: Int): Int => {
          if (n == 0) 0
          else if (n == 1) 1
          else fib(n - 1) + fib(n - 2)
@@ -95,7 +95,7 @@ object JavaCodeGeneratorTest extends TestSuite {
       assert(
         run(
           """
-             def add3(a: Int) = a + 3
+             def add3 = fn (a: Int) => a + 3
             val a = #[ "3", "5", 6 ]
             val idx0 = 1
             val index = idx0 + 1
@@ -108,7 +108,7 @@ object JavaCodeGeneratorTest extends TestSuite {
       assert(
         run(
           """
-            |def add3(i: Int) = i + 3
+            |def add3 = fn (i: Int) => i + 3
             |
             |val a = add3
             |a(3)
@@ -130,6 +130,18 @@ object JavaCodeGeneratorTest extends TestSuite {
 
         myFunc()
       """) == "baz"
+      )
+    }
+    test("Expr defs") {
+      assert(
+        run(
+          """
+            |def a = b + 3
+            |def b = 4
+            |
+            |a
+            |""".stripMargin
+        ) == 7
       )
     }
   }
