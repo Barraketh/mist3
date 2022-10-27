@@ -144,6 +144,18 @@ object JavaCodeGeneratorTest extends TestSuite {
         ) == 7
       )
     }
+    test("Inline functions") {
+      assert(
+        run(
+          """
+            |def add3 = inline (a: Int) => a + 3
+            |
+            |val x = add3(6)
+            |x
+            |""".stripMargin
+        ) == 9
+      )
+    }
   }
 
 }

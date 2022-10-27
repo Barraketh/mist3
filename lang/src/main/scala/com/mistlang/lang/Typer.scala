@@ -69,9 +69,30 @@ object Typer {
 
   private def evalCall(env: TypeEnv, c: Call): TypedAst.Expr = {
     val fTyped = evalExp(env, c.func)
+    val resolvedTypes = c.args.map(e => evalExp(env, e))
+
     fTyped.tpe.t match {
+      case l: InlinedLambda =>
+        val argTypes =
+          l.ast.args.map(ad => Type.Arg(ad.name, Interpreter.evalExp(env.runEnv, ad.tpe).asInstanceOf[TaggedType]))
+        val resolvedArgs = c.args.map(evalExp(env, _))
+
+        argTypes.zip(resolvedArgs).foreach { case (arg, resolved) =>
+          checkArg(arg.name, arg.tpe, resolved.tpe)
+        }
+        val newScope =
+          argTypes.zip(resolvedArgs).foldLeft(env.newScope) { case (curEnv, arg) => curEnv.put(arg._1.name, arg._2) }
+        val resolvedBody = evalExp(newScope, l.ast.body)
+        l.ast.outType.foreach { e =>
+          val outType = Interpreter.evalExp(env.runEnv, e).asInstanceOf[TaggedType]
+          checkArg("outType", outType, resolvedBody.tpe)
+        }
+        TypedAst.Block(
+          argTypes.zip(resolvedArgs).map { case (arg, exp) => TypedAst.Val(arg.name, exp, TaggedType.unitType) } :+
+            resolvedBody,
+          resolvedBody.tpe
+        )
       case f: FuncType =>
-        val resolvedTypes = c.args.map(e => evalExp(env, e))
         val outType = f.f(resolvedTypes.map(_.tpe))
         TypedAst.Call(fTyped, resolvedTypes, outType)
       case other => error(s"Cannot call $other")
@@ -105,9 +126,6 @@ object Typer {
     (env.put(v.name, nextExpr), TypedAst.Val(v.name, nextExpr, TaggedType.unitType))
   }
 
-  private def evalDef(env: TypeEnv, d: Def): TypedAst =
-    TypedAst.Def(d.name, env.typeEnv.get(d.name).get, TaggedType.unitType)
-
   def evalExp(env: TypeEnv, ast: Expr): TypedAst.Expr = {
     ast match {
       case l: Literal => evalLiteral(l)
@@ -115,7 +133,9 @@ object Typer {
       case b: Block   => evalBlock(env, b)
       case c: Call    => evalCall(env, c)
       case i: If      => evalIf(env, i)
-      case l: Lambda  => evalLambda(env, l)
+      case l: Lambda =>
+        if (l.isInline) Synthetic(TaggedType(InlinedLambda(l)))
+        else evalLambda(env, l)
     }
   }
 
@@ -139,7 +159,12 @@ object Typer {
       .foldLeft(topLevelEnv -> (Nil: List[TypedAst])) { case ((curEnv, curAsts), stmt) =>
         stmt match {
           case e: Expr => (curEnv, curAsts :+ evalExp(curEnv, e))
-          case d: Def  => (curEnv, curAsts :+ evalDef(curEnv, d))
+          case d: Def =>
+            val defExpr = curEnv.typeEnv.get(d.name).get
+            defExpr match {
+              case Synthetic(TaggedType(InlinedLambda(_), _)) => (curEnv, curAsts)
+              case _ => (curEnv, curAsts :+ TypedAst.Def(d.name, defExpr, TaggedType.unitType))
+            }
           case v: Val =>
             val (nextEnv, nextAst) = evalVal(curEnv, v)
             (nextEnv, curAsts :+ nextAst)

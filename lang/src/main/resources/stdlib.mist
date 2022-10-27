@@ -1,5 +1,11 @@
-operator +(AdditionPrecedence)(a: Int, b: Int): Int = {
-  ((a + b) : {
-    if (
-  })
+def at = fn (t: Any, idx: Int) => {
+  type resType = comptime(t, idx) {
+    assert(isTuple(t), "t must be a tuple")
+    val idxValue = tags(idx, "value")
+    assert(idxValue != null, "idx value must be statically known")
+    val tValue = tags(t, "value")
+    assert(idxValue >= 0 && idxValue < length(tValue), "Invalid length for idx - must be between 0 and t.length")
+    __at(tValue, idxValue)
+  }
+  as(__at(t, idx), resType)
 }

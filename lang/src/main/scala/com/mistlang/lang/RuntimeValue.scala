@@ -58,4 +58,6 @@ object Type {
   }
   case class TypelevelFunc(f: List[TaggedType] => TaggedType) extends FuncType
 
+  case class InlinedLambda(ast: Ast.Lambda) extends Type
+
 }

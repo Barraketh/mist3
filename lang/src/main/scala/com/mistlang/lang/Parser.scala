@@ -93,8 +93,8 @@ object Grammar {
   def argDeclList[_: P] = P("(" ~/ argDecl.rep(0, ",") ~ ")").map(_.toList)
 
   def funcData[_: P] = P(argDeclList ~ (":" ~ expr).? ~ "=>" ~ expr)
-  def lambda[_: P] = P("fn" ~/ funcData).map { case (args, outType, body) =>
-    Lambda(args, outType, body, None)
+  def lambda[_: P] = P(("fn" | "inline").! ~/ funcData).map { case (fnType, (args, outType, body)) =>
+    Lambda(args, outType, body, None, fnType == "inline")
   }
   def stmt[_: P] = P(valP | defP | expr)
 

@@ -31,6 +31,19 @@ object TyperTest extends TestSuite {
       assert(res == Type.IntType)
       intercept[TypeError](run(code("\"1\"")))
     }
+    test("Inline function params") {
+      def code(param: String) = {
+        s"""
+            def foo = inline (a: Int, b: String) => a
+            foo($param, "s")
+          """
+      }
+
+      val res = run(code("1"))
+      println(res)
+      assert(res == Type.IntType)
+      intercept[TypeError](run(code("\"1\"")))
+    }
     test("Recursion") {
       def code(inParam: String, outParam: Option[String]) = {
         s"""{
