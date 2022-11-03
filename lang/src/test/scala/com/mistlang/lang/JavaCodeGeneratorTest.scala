@@ -79,7 +79,7 @@ object JavaCodeGeneratorTest extends TestSuite {
     }
     test("Recursion") {
       val code =
-        s"""{
+        s"""
        def fib = fn(n: Int): Int => {
          if (n == 0) 0
          else if (n == 1) 1
@@ -87,7 +87,7 @@ object JavaCodeGeneratorTest extends TestSuite {
        }
 
        fib(6)
-     }"""
+     """
 
       assert(run(code) == 8)
     }

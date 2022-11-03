@@ -56,18 +56,8 @@ object Interpreter extends {
 
   private def evalBlock(env: RuntimeEnv, b: Block): RuntimeValue = {
     val newEnv = env.newScope
-    val stmts = b.stmts
-
-    val (defs, others) = stmts.partition {
-      case _: Def => true
-      case _      => false
-    }
-    val topLevel = defs.collect { case d: Def =>
-      d.name -> ((curEnv: RuntimeEnv) => evalExp(curEnv, d.expr))
-    }
-    val topLevelEnv = newEnv.putTopLevel(topLevel)
-    others
-      .foldLeft(topLevelEnv -> (UnitVal: RuntimeValue)) { case ((curEnv, _), stmt) =>
+    b.stmts
+      .foldLeft(newEnv -> (UnitVal: RuntimeValue)) { case ((curEnv, _), stmt) =>
         stmt match {
           case e: Expr => (curEnv, evalExp(curEnv, e))
           case v: Val =>
@@ -87,6 +77,14 @@ object Interpreter extends {
     case i: If      => evalIf(env, i)
 
   }
+
+  def evalProgram(env: RuntimeEnv, p: Program): RuntimeValue = {
+    val topLevel = p.defs.map { d: Def =>
+      d.name -> ((curEnv: RuntimeEnv) => evalExp(curEnv, d.expr))
+    }
+    val topLevelEnv = env.putTopLevel(topLevel)
+    evalBlock(topLevelEnv, Block(p.stmts))
+  }
 }
 
 object RuntimeInterpreter {
@@ -95,6 +93,6 @@ object RuntimeInterpreter {
     curEnv.put(name, f)
   }
 
-  def eval(e: List[Ast]): RuntimeValue = Interpreter.evalExp(env, Block(e))
+  def eval(p: Program): RuntimeValue = Interpreter.evalProgram(env, p)
 
 }

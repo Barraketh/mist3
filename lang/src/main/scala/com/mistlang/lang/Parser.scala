@@ -4,12 +4,12 @@ import com.mistlang.lang.Ast._
 import fastparse._
 
 trait Parser {
-  def parse(s: String): List[Ast]
+  def parse(s: String): Program
 }
 
 object FastparseParser extends Parser {
-  override def parse(s: String): List[Ast] = {
-    fastparse.parse(s, Grammar.allStmts(_)) match {
+  override def parse(s: String): Program = {
+    fastparse.parse(s, Grammar.program(_)) match {
       case Parsed.Success(value, _) => value
       case f: Parsed.Failure =>
         val t = f.trace()
@@ -96,13 +96,15 @@ object Grammar {
   def lambda[_: P] = P(("fn" | "inline").! ~/ funcData).map { case (fnType, (args, outType, body)) =>
     Lambda(args, outType, body, None, fnType == "inline")
   }
-  def stmt[_: P] = P(valP | defP | expr)
+  def stmt[_: P] = P(valP | expr)
 
   def block[_: P] = P("{" ~/ stmts ~ "}").map(stmts => Block(stmts))
 
   def stmts[_: P] = P("\n".rep ~ stmt.rep(0, "\n".rep(1)) ~ "\n".rep).map(_.toList)
 
-  def allStmts[_: P] = P(stmts ~ End)
+  def program[_: P] = P("\n".rep ~ defP.rep(0, "\n".rep(1)) ~ stmts ~ End).map { case (d, s) =>
+    Program(d.toList, s)
+  }
 
   sealed trait Trailer
   case class FuncApply(args: List[Expr]) extends Trailer

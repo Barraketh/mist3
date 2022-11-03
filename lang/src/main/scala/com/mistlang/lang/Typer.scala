@@ -43,7 +43,7 @@ object Typer {
   }
 
   private def evalBlock(env: TypeEnv, b: Block): TypedAst.Expr = {
-    val typedStmts = eval(env.newScope, b.stmts)
+    val typedStmts = evalStmts(env.newScope, b.stmts)
     TypedAst.Block(typedStmts, typedStmts.lastOption.map(_.tpe).getOrElse(TaggedType.unitType))
   }
 
@@ -139,12 +139,21 @@ object Typer {
     }
   }
 
-  def eval(env: TypeEnv, stmts: List[Ast]): List[TypedAst] = {
-    val (defs, others) = stmts.partition {
-      case _: Def => true
-      case _      => false
-    }
-    val topLevel = defs.collect { case d: Def =>
+  def evalStmts(env: TypeEnv, stmts: List[FnStmt]): List[TypedAst] = {
+    stmts
+      .foldLeft(env -> (Nil: List[TypedAst])) { case ((curEnv, curAsts), stmt) =>
+        stmt match {
+          case e: Expr => (curEnv, curAsts :+ evalExp(curEnv, e))
+          case v: Val =>
+            val (nextEnv, nextAst) = evalVal(curEnv, v)
+            (nextEnv, curAsts :+ nextAst)
+        }
+      }
+      ._2
+  }
+
+  def eval(env: TypeEnv, program: Program): List[TypedAst] = {
+    val topLevel = program.defs.map { d =>
       d.name -> ((curEnv: TypeEnv) => {
         val resolved = evalExp(curEnv, d.expr)
         d.expr match {
@@ -155,22 +164,19 @@ object Typer {
     }
     val topLevelEnv = env.putTopLevel(topLevel)
 
-    (defs ::: others)
-      .foldLeft(topLevelEnv -> (Nil: List[TypedAst])) { case ((curEnv, curAsts), stmt) =>
-        stmt match {
-          case e: Expr => (curEnv, curAsts :+ evalExp(curEnv, e))
-          case d: Def =>
-            val defExpr = curEnv.typeEnv.get(d.name).get
-            defExpr match {
-              case Synthetic(TaggedType(InlinedLambda(_), _)) => (curEnv, curAsts)
-              case _ => (curEnv, curAsts :+ TypedAst.Def(d.name, defExpr, TaggedType.unitType))
-            }
-          case v: Val =>
-            val (nextEnv, nextAst) = evalVal(curEnv, v)
-            (nextEnv, curAsts :+ nextAst)
+    val typedDefs = program.defs
+      .map { d =>
+        val defExpr = topLevelEnv.typeEnv.get(d.name).get
+        defExpr match {
+          case Synthetic(TaggedType(InlinedLambda(_), _)) => None
+          case _                                          => Some(TypedAst.Def(d.name, defExpr, TaggedType.unitType))
         }
       }
-      ._2
+      .collect { case Some(d) => d }
+
+    val typedStmts = evalStmts(topLevelEnv, program.stmts)
+
+    typedDefs ::: typedStmts
   }
 }
 
