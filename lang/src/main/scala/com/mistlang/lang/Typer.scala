@@ -2,7 +2,7 @@ package com.mistlang.lang
 
 import com.mistlang.lang.Ast.Program
 
-object AstToIR {
+object Typer {
   def compileLambda(args: List[Ast.ArgDecl], body: Ast.Expr) = {
     val irBody = body match {
       case b: Ast.Block => b.stmts.map(compileFnStmt)

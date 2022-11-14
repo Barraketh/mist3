@@ -1,5 +1,6 @@
 package com.mistlang.lang
 
+import com.mistlang.lang.RuntimeValue.IntVal
 import utest._
 
 object InterpreterTest extends TestSuite {
@@ -7,14 +8,14 @@ object InterpreterTest extends TestSuite {
 
   val env = Env(
     RuntimeIntrinsics.intrinsics.map { case (name, v) =>
-      name -> Immutable[Any](v)
+      name -> Immutable[RuntimeValue](v)
     },
     None
   )
 
-  def run(s: String): Any = {
+  def run(s: String): RuntimeValue = {
     val e = parser.parse(s)
-    val ir = AstToIR.compile(e)
+    val ir = Typer.compile(e)
     Interpreter.runAll(env, ir)._2
   }
 
@@ -22,7 +23,7 @@ object InterpreterTest extends TestSuite {
     test("Test arithm") {
       val s = "3 * 2 + 3"
       val res = run(s)
-      assert(res == 9)
+      assert(res == IntVal(9))
     }
 
     test("Block") {
@@ -33,7 +34,7 @@ object InterpreterTest extends TestSuite {
             | val b = 6
             | a + b
             |}""".stripMargin
-        ) == 9
+        ) == IntVal(9)
       )
 
       assert(
@@ -46,7 +47,7 @@ object InterpreterTest extends TestSuite {
             | }
             | a + b
             |}""".stripMargin
-        ) == 13
+        ) == IntVal(13)
       )
 
       assert(
@@ -58,7 +59,7 @@ object InterpreterTest extends TestSuite {
             |}
             |a + b
             |}""".stripMargin
-        ) == 12
+        ) == IntVal(12)
       )
     }
 
@@ -73,9 +74,8 @@ object InterpreterTest extends TestSuite {
 
           fib(6)
          """.stripMargin
-      } == 8)
+      } == IntVal(8))
     }
-
 
   }
 }
