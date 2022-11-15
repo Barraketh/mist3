@@ -1,44 +1,118 @@
 package com.mistlang.lang
 
-import com.mistlang.lang.Ast.Program
+import com.mistlang.lang.Ast.{FnStmt, Program}
+import com.mistlang.lang.RuntimeValue.{BasicFuncType, UnitType}
 
 object Typer {
-  def compileLambda(args: List[Ast.ArgDecl], body: Ast.Expr) = {
-    val irBody = body match {
-      case b: Ast.Block => b.stmts.map(compileFnStmt)
-      case _            => compileExpr(body) :: Nil
+  def error(s: String) = throw TypeError(s)
+
+  def checkType(expected: RuntimeValue.Type, actual: RuntimeValue.Type, name: String): Unit = {
+    if (expected == RuntimeValue.AnyType || expected == actual) ()
+    else error(s"Unexpected type for $name - expected $expected, actual $actual")
+  }
+  private def compileLambda(tpe: BasicFuncType, body: Ast.Expr, env: Env[RuntimeValue]) = {
+
+    val newEnv = tpe.expected.foldLeft(env.newScope) { case (curEnv, nextArg) =>
+      curEnv.put(nextArg._1, nextArg._2)
     }
-    IR.Lambda(args.map(_.name), irBody)
+
+    val irBody = body match {
+      case b: Ast.Block => compileAll(b.stmts, newEnv)._1
+      case _            => compileExpr(body, newEnv) :: Nil
+    }
+    val computedOut = getOutType(irBody)
+    checkType(tpe.out, computedOut, "out")
+
+    IR.Lambda(irBody, tpe)
   }
 
-  def compileExpr(expr: Ast.Expr): IR.Expr = expr match {
-    case Ast.Literal(value) => IR.Literal(value)
-    case Ast.Ident(name)    => IR.Ident(name)
+  private def getLambdaType(d: Ast.Def, env: Env[RuntimeValue]): BasicFuncType = {
+    val argTypes = d.args.map(arg =>
+      Interpreter.evalExpr(env, compileExpr(arg.tpe, env)) match {
+        case tpe: RuntimeValue.Type => arg.name -> tpe
+      }
+    )
+    val outType = Interpreter.evalExpr(env, compileExpr(d.outType, env)) match {
+      case tpe: RuntimeValue.Type => tpe
+    }
+    BasicFuncType(argTypes, outType)
+  }
+
+  private def getOutType(stmts: List[IR]): RuntimeValue.Type = {
+    if (stmts.isEmpty) UnitType
+    else stmts.last.tpe
+  }
+
+  private def blockLambda(stmts: List[Ast.FnStmt], env: Env[RuntimeValue]): IR.Lambda = {
+    val compiledStmts = compileAll(stmts, env)._1
+    val outType = getOutType(compiledStmts)
+    IR.Lambda(compiledStmts, BasicFuncType(Nil, outType))
+  }
+
+  private def compileExpr(expr: Ast.Expr, env: Env[RuntimeValue]): IR.Expr = expr match {
+    case Ast.Literal(value) =>
+      value match {
+        case i: Int     => IR.IntLiteral(i)
+        case b: Boolean => IR.BoolLiteral(b)
+        case s: String  => IR.StrLiteral(s)
+      }
+
+    case Ast.Ident(name) =>
+      val value = env.get(name).getOrElse(error(s"$name not found"))
+      val tpe = value match {
+        case t: RuntimeValue.Type => t
+        case other                => error(s"$other is not a type")
+      }
+      IR.Ident(name, tpe)
     case Ast.Block(stmts) =>
-      IR.Call(
-        IR.Lambda(Nil, stmts.map(compileFnStmt)),
-        Nil
-      )
+      val lambda = blockLambda(stmts, env)
+      IR.Call(lambda, Nil)
     case Ast.If(expr, success, fail) =>
+      val successLambda = blockLambda(success :: Nil, env)
+      val failLambda = blockLambda(fail :: Nil, env)
       IR.Call(
-        IR.Ident("if"),
+        compileExpr(Ast.Ident("if"), env),
         List(
-          compileExpr(expr),
-          IR.Lambda(Nil, compileExpr(success) :: Nil),
-          IR.Lambda(Nil, compileExpr(fail) :: Nil)
+          compileExpr(expr, env),
+          successLambda,
+          failLambda
         )
       )
-    case Ast.Call(func, args, _) => IR.Call(compileExpr(func), args.map(compileExpr))
+    case Ast.Call(func, args, _) =>
+      val compiledFunc = compileExpr(func, env)
+      IR.Call(compiledFunc, args.map(a => compileExpr(a, env)))
   }
-  def compileFnStmt(stmt: Ast.FnStmt): IR = stmt match {
-    case expr: Ast.Expr      => compileExpr(expr)
-    case Ast.Val(name, expr) => IR.Let(name, compileExpr(expr))
+  private def compileStmt(stmt: Ast.FnStmt, env: Env[RuntimeValue]): (IR, Env[RuntimeValue]) = stmt match {
+    case expr: Ast.Expr => (compileExpr(expr, env), env)
+    case Ast.Val(name, expr) =>
+      val compiledExpr = compileExpr(expr, env)
+      (IR.Let(name, compiledExpr), env.put(name, compiledExpr.tpe))
   }
-  def compile(program: Program): List[IR] = {
-    val forwardRefs = program.defs.map(d => IR.Let(d.name, IR.Ident(Interpreter.unitVal), mutable = true))
-    val values = program.defs.map { d =>
-      IR.Set(d.name, compileLambda(d.args, d.body))
+
+  private def compileAll(stmts: List[FnStmt], env: Env[RuntimeValue]): (List[IR], Env[RuntimeValue]) = {
+    stmts.foldLeft((Nil: List[IR], env)) { case ((curStmts, curEnv), nextStmt) =>
+      val compiled = compileStmt(nextStmt, curEnv)
+      (curStmts :+ compiled._1, compiled._2)
     }
-    forwardRefs ::: values ::: program.stmts.map(compileFnStmt)
+  }
+
+  def compile(program: Program, env: Env[RuntimeValue]): List[IR] = {
+    val tpes = program.defs.map { d =>
+      d.name -> getLambdaType(d, env)
+    }.toMap
+
+    val forwardRefs =
+      program.defs.map(d => IR.Let(d.name, IR.Ident(Interpreter.nullVal, tpes(d.name)), mutable = true))
+
+    val newEnv = program.defs.foldLeft(env) { case (curEnv, nextDef) =>
+      curEnv.put(nextDef.name, tpes(nextDef.name))
+    }
+
+    val values = program.defs.map { d =>
+      IR.Set(d.name, compileLambda(tpes(d.name), d.body, newEnv))
+    }
+    forwardRefs ::: values ::: compileAll(program.stmts, newEnv)._1
   }
 }
+
+case class TypeError(msg: String) extends RuntimeException(msg)

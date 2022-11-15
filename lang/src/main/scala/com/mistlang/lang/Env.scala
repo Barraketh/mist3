@@ -21,6 +21,10 @@ case class Env[T](map: Map[String, EnvValue[T]], parent: Option[Env[T]]) {
   def newScope: Env[T] = new Env[T](Map.empty, Some(this))
 }
 
+object Env {
+  def empty[T]: Env[T] = new Env(Map.empty, None)
+}
+
 sealed trait EnvValue[T] {
   def value: T
 }

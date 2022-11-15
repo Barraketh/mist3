@@ -6,8 +6,15 @@ import utest._
 object InterpreterTest extends TestSuite {
   val parser = FastparseParser
 
-  val env = Env(
+  val runtimeEnv = Env(
     RuntimeIntrinsics.intrinsics.map { case (name, v) =>
+      name -> Immutable[RuntimeValue](v)
+    },
+    None
+  )
+
+  val typerEnv = Env(
+    TyperIntrinsics.intrinsics.map { case (name, v) =>
       name -> Immutable[RuntimeValue](v)
     },
     None
@@ -15,8 +22,8 @@ object InterpreterTest extends TestSuite {
 
   def run(s: String): RuntimeValue = {
     val e = parser.parse(s)
-    val ir = Typer.compile(e)
-    Interpreter.runAll(env, ir)._2
+    val ir = Typer.compile(e, typerEnv)
+    Interpreter.runAll(runtimeEnv, ir)._2
   }
 
   val tests = Tests {
@@ -66,7 +73,7 @@ object InterpreterTest extends TestSuite {
     test("Recursion") {
       assert(run {
         """
-          def fib(n : Any): Any = {
+          def fib(n : Int): Int = {
             if (n == 0) 0
             else if (n == 1) 1
             else fib(n - 1) + fib(n - 2)

@@ -12,6 +12,7 @@ object RuntimeIntrinsics {
     "if" -> Func { case BoolVal(cond) :: Func(success) :: Func(failure) :: Nil =>
       if (cond) success(Nil) else failure(Nil)
     },
-    "Unit" -> UnitVal
+    "Unit" -> UnitVal,
+    "Null" -> Null
   )
 }
