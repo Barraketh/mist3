@@ -1,8 +1,9 @@
 package com.mistlang.lang
 
 import com.mistlang.lang.Ast.{FnStmt, Program}
+import com.mistlang.lang.IR.BodyStmt
 import com.mistlang.lang.RuntimeValue.Type
-import Type.{BasicFuncType, UnitType}
+import com.mistlang.lang.RuntimeValue.Type.{BasicFuncType, UnitType}
 
 object Typer {
   def error(s: String) = throw TypeError(s)
@@ -13,7 +14,7 @@ object Typer {
   }
   private def compileLambda(tpe: BasicFuncType, body: Ast.Expr, env: Env[RuntimeValue]) = {
 
-    val newEnv = tpe.expected.foldLeft(env.newScope) { case (curEnv, nextArg) =>
+    val newEnv = tpe.args.foldLeft(env.newScope) { case (curEnv, nextArg) =>
       curEnv.put(nextArg._1, nextArg._2)
     }
 
@@ -36,7 +37,7 @@ object Typer {
     val outType = Interpreter.evalExpr(env, compileExpr(d.outType, env)) match {
       case tpe: Type => tpe
     }
-    BasicFuncType(argTypes, outType)
+    BasicFuncType(argTypes, outType, isLambda = false)
   }
 
   private def getOutType(stmts: List[IR]): Type = {
@@ -47,7 +48,7 @@ object Typer {
   private def blockLambda(stmts: List[Ast.FnStmt], env: Env[RuntimeValue]): IR.Lambda = {
     val compiledStmts = compileAll(stmts, env)._1
     val outType = getOutType(compiledStmts)
-    IR.Lambda(compiledStmts, BasicFuncType(Nil, outType))
+    IR.Lambda(compiledStmts, BasicFuncType(Nil, outType, isLambda = true))
   }
 
   private def compileExpr(expr: Ast.Expr, env: Env[RuntimeValue]): IR.Expr = expr match {
@@ -83,15 +84,15 @@ object Typer {
       val compiledFunc = compileExpr(func, env)
       IR.Call(compiledFunc, args.map(a => compileExpr(a, env)))
   }
-  private def compileStmt(stmt: Ast.FnStmt, env: Env[RuntimeValue]): (IR, Env[RuntimeValue]) = stmt match {
+  private def compileStmt(stmt: Ast.FnStmt, env: Env[RuntimeValue]): (BodyStmt, Env[RuntimeValue]) = stmt match {
     case expr: Ast.Expr => (compileExpr(expr, env), env)
     case Ast.Val(name, expr) =>
       val compiledExpr = compileExpr(expr, env)
       (IR.Let(name, compiledExpr), env.put(name, compiledExpr.tpe))
   }
 
-  private def compileAll(stmts: List[FnStmt], env: Env[RuntimeValue]): (List[IR], Env[RuntimeValue]) = {
-    stmts.foldLeft((Nil: List[IR], env)) { case ((curStmts, curEnv), nextStmt) =>
+  private def compileAll(stmts: List[FnStmt], env: Env[RuntimeValue]): (List[BodyStmt], Env[RuntimeValue]) = {
+    stmts.foldLeft((Nil: List[BodyStmt], env)) { case ((curStmts, curEnv), nextStmt) =>
       val compiled = compileStmt(nextStmt, curEnv)
       (curStmts :+ compiled._1, compiled._2)
     }
@@ -102,17 +103,14 @@ object Typer {
       d.name -> getLambdaType(d, env)
     }.toMap
 
-    val forwardRefs =
-      program.defs.map(d => IR.Let(d.name, IR.Ident(Interpreter.nullVal, tpes(d.name)), mutable = true))
-
     val newEnv = program.defs.foldLeft(env) { case (curEnv, nextDef) =>
       curEnv.put(nextDef.name, tpes(nextDef.name))
     }
 
     val values = program.defs.map { d =>
-      IR.Set(d.name, compileLambda(tpes(d.name), d.body, newEnv))
+      IR.Def(d.name, compileLambda(tpes(d.name), d.body, newEnv))
     }
-    forwardRefs ::: values ::: compileAll(program.stmts, newEnv)._1
+    values ::: compileAll(program.stmts, newEnv)._1
   }
 }
 

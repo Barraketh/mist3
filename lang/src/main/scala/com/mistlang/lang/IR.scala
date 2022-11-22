@@ -7,15 +7,17 @@ sealed trait IR {
   val tpe: Type
 }
 object IR {
-  sealed trait Expr extends IR
-  case class Let(name: String, expr: Expr, mutable: Boolean = false) extends IR {
+  sealed trait BodyStmt extends IR
+  sealed trait Expr extends BodyStmt
+  case class Let(name: String, expr: Expr) extends BodyStmt {
     override val tpe: Type = UnitType
   }
-  case class Set(name: String, expr: Expr) extends Expr {
-    override val tpe: Type = UnitType
+  case class Def(name: String, l: Lambda) extends IR {
+    override val tpe: Type = l.tpe
   }
+
   case class Ident(name: String, tpe: Type) extends Expr
-  case class Lambda(body: List[IR], tpe: BasicFuncType) extends Expr
+  case class Lambda(body: List[BodyStmt], tpe: BasicFuncType) extends Expr
   case class Call(expr: Expr, args: List[Expr]) extends Expr {
     override val tpe: Type = {
       expr.tpe match {

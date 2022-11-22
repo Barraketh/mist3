@@ -6,20 +6,15 @@ object Interpreter {
 
   import IR._
 
-  val nullVal = "Null"
-
   def evalExpr(env: Env[RuntimeValue], expr: Expr): RuntimeValue = {
     expr match {
-      case i: Ident => env.get(i.name).getOrElse(throw new RuntimeException(s"${i.name} not found"))
-      case Set(name, newValue) =>
-        env.set(name, evalExpr(env, newValue))
-        UnitVal
+      case i: Ident          => env.get(i.name).getOrElse(throw new RuntimeException(s"${i.name} not found"))
       case IR.IntLiteral(i)  => IntVal(i)
       case IR.StrLiteral(s)  => StrVal(s)
       case IR.BoolLiteral(b) => BoolVal(b)
       case l: Lambda =>
         Func((args: List[RuntimeValue]) => {
-          val newEnv = l.tpe.expected.map(_._1).zip(args).foldLeft(env.newScope) { case (curEnv, (name, value)) =>
+          val newEnv = l.tpe.args.map(_._1).zip(args).foldLeft(env.newScope) { case (curEnv, (name, value)) =>
             curEnv.put(name, value)
           }
           runAll(newEnv, l.body)._2
@@ -37,14 +32,24 @@ object Interpreter {
   def run(env: Env[RuntimeValue], stmt: IR): (Env[RuntimeValue], RuntimeValue) = {
     stmt match {
       case e: Expr => (env, evalExpr(env, e))
-      case Let(name, expr, mutable) =>
+      case Let(name, expr) =>
         val evaluated = evalExpr(env, expr)
-        (env.put(name, evaluated, mutable), UnitVal)
+        (env.put(name, evaluated), UnitVal)
+      case d: Def =>
+        val evaluated = evalExpr(env, d.l)
+        env.set(d.name, evaluated)
+        (env, UnitVal)
     }
   }
 
   def runAll(env: Env[RuntimeValue], stmts: List[IR]): (Env[RuntimeValue], RuntimeValue) = {
-    stmts.foldLeft((env, UnitVal: RuntimeValue)) { case ((curEnv, _), nextStmt) =>
+    val startEnv = stmts.foldLeft(env) { case (curEnv, nextStmt) =>
+      nextStmt match {
+        case d: Def => curEnv.put(d.name, Null, mutable = true)
+        case _      => curEnv
+      }
+    }
+    stmts.foldLeft((startEnv, UnitVal: RuntimeValue)) { case ((curEnv, _), nextStmt) =>
       run(curEnv, nextStmt)
     }
   }
@@ -73,11 +78,11 @@ object RuntimeValue {
       val f: List[Type] => Type
     }
 
-    case class BasicFuncType(expected: List[(String, Type)], out: Type) extends FuncType {
-      override val f: List[Type] => Type = (args: List[Type]) => {
-        if (args.length != expected.length)
-          Typer.error(s"Unexpected number of args - expected ${expected.length}, got ${args.length}")
-        expected.zip(args).foreach { case ((name, e), a) =>
+    case class BasicFuncType(args: List[(String, Type)], out: Type, isLambda: Boolean) extends FuncType {
+      override val f: List[Type] => Type = (actualArgs: List[Type]) => {
+        if (actualArgs.length != args.length)
+          Typer.error(s"Unexpected number of args - expected ${args.length}, got ${actualArgs.length}")
+        args.zip(actualArgs).foreach { case ((name, e), a) =>
           Typer.checkType(e, a, name)
         }
         out
@@ -86,7 +91,7 @@ object RuntimeValue {
 
     object BasicFuncType {
       def op(a: Type, b: Type, out: Type): BasicFuncType = {
-        BasicFuncType(List(("a", a), ("b", b)), out)
+        BasicFuncType(List(("a", a), ("b", b)), out, isLambda = false)
       }
     }
     case class TypelevelFunc(f: List[Type] => Type) extends FuncType
