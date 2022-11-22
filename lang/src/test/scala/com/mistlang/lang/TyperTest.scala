@@ -1,6 +1,7 @@
 package com.mistlang.lang
 
 import com.mistlang.lang.RuntimeValue._
+import Type._
 import utest._
 
 object TyperTest extends TestSuite {

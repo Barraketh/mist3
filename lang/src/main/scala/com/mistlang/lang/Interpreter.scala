@@ -62,32 +62,34 @@ object RuntimeValue {
   case class Func(f: List[RuntimeValue] => RuntimeValue) extends RuntimeValue
 
   sealed trait Type extends RuntimeValue
-  case object IntType extends Type
-  case object StrType extends Type
-  case object BoolType extends Type
-  case object UnitType extends Type
-  case object AnyType extends Type
+  object Type {
+    case object IntType extends Type
+    case object StrType extends Type
+    case object BoolType extends Type
+    case object UnitType extends Type
+    case object AnyType extends Type
 
-  sealed trait FuncType extends Type {
-    val f: List[Type] => Type
-  }
+    sealed trait FuncType extends Type {
+      val f: List[Type] => Type
+    }
 
-  case class BasicFuncType(expected: List[(String, Type)], out: Type) extends FuncType {
-    override val f: List[Type] => Type = (args: List[Type]) => {
-      if (args.length != expected.length)
-        Typer.error(s"Unexpected number of args - expected ${expected.length}, got ${args.length}")
-      expected.zip(args).foreach { case ((name, e), a) =>
-        Typer.checkType(e, a, name)
+    case class BasicFuncType(expected: List[(String, Type)], out: Type) extends FuncType {
+      override val f: List[Type] => Type = (args: List[Type]) => {
+        if (args.length != expected.length)
+          Typer.error(s"Unexpected number of args - expected ${expected.length}, got ${args.length}")
+        expected.zip(args).foreach { case ((name, e), a) =>
+          Typer.checkType(e, a, name)
+        }
+        out
       }
-      out
     }
-  }
 
-  object BasicFuncType {
-    def op(a: Type, b: Type, out: Type): BasicFuncType = {
-      BasicFuncType(List(("a", a), ("b", b)), out)
+    object BasicFuncType {
+      def op(a: Type, b: Type, out: Type): BasicFuncType = {
+        BasicFuncType(List(("a", a), ("b", b)), out)
+      }
     }
+    case class TypelevelFunc(f: List[Type] => Type) extends FuncType
   }
-  case class TypelevelFunc(f: List[Type] => Type) extends FuncType
 
 }

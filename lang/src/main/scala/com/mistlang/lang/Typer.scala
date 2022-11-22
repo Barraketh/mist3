@@ -1,13 +1,14 @@
 package com.mistlang.lang
 
 import com.mistlang.lang.Ast.{FnStmt, Program}
-import com.mistlang.lang.RuntimeValue.{BasicFuncType, UnitType}
+import com.mistlang.lang.RuntimeValue.Type
+import Type.{BasicFuncType, UnitType}
 
 object Typer {
   def error(s: String) = throw TypeError(s)
 
-  def checkType(expected: RuntimeValue.Type, actual: RuntimeValue.Type, name: String): Unit = {
-    if (expected == RuntimeValue.AnyType || expected == actual) ()
+  def checkType(expected: Type, actual: Type, name: String): Unit = {
+    if (expected == Type.AnyType || expected == actual) ()
     else error(s"Unexpected type for $name - expected $expected, actual $actual")
   }
   private def compileLambda(tpe: BasicFuncType, body: Ast.Expr, env: Env[RuntimeValue]) = {
@@ -29,16 +30,16 @@ object Typer {
   private def getLambdaType(d: Ast.Def, env: Env[RuntimeValue]): BasicFuncType = {
     val argTypes = d.args.map(arg =>
       Interpreter.evalExpr(env, compileExpr(arg.tpe, env)) match {
-        case tpe: RuntimeValue.Type => arg.name -> tpe
+        case tpe: Type => arg.name -> tpe
       }
     )
     val outType = Interpreter.evalExpr(env, compileExpr(d.outType, env)) match {
-      case tpe: RuntimeValue.Type => tpe
+      case tpe: Type => tpe
     }
     BasicFuncType(argTypes, outType)
   }
 
-  private def getOutType(stmts: List[IR]): RuntimeValue.Type = {
+  private def getOutType(stmts: List[IR]): Type = {
     if (stmts.isEmpty) UnitType
     else stmts.last.tpe
   }

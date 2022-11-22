@@ -1,6 +1,7 @@
 package com.mistlang.lang
 
 import com.mistlang.lang.RuntimeValue._
+import Type._
 
 sealed trait IR {
   val tpe: Type

@@ -1,7 +1,7 @@
 package com.mistlang.lang
 
-import com.mistlang.lang.RuntimeValue.BasicFuncType.op
-import com.mistlang.lang.RuntimeValue._
+import com.mistlang.lang.RuntimeValue.Type.BasicFuncType.op
+import com.mistlang.lang.RuntimeValue.Type._
 
 object TyperIntrinsics {
   val intrinsics: Map[String, RuntimeValue.Type] = Map(
