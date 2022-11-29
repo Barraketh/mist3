@@ -9,10 +9,6 @@ object TyperIntrinsics {
     "-" -> op(IntType, IntType, IntType),
     "*" -> op(IntType, IntType, IntType),
     "==" -> op(AnyType, AnyType, BoolType),
-    "if" -> TypelevelFunc({ case BoolType :: BasicFuncType(Nil, successTpe) :: BasicFuncType(Nil, failTpe) :: Nil =>
-      if (successTpe == failTpe) successTpe
-      else AnyType
-    }),
     "Unit" -> UnitType,
     "Any" -> AnyType,
     "Int" -> IntType,

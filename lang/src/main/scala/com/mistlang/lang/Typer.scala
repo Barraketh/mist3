@@ -3,7 +3,7 @@ package com.mistlang.lang
 import com.mistlang.lang.Ast.{FnStmt, Program}
 import com.mistlang.lang.IR.BodyStmt
 import com.mistlang.lang.RuntimeValue.Type
-import com.mistlang.lang.RuntimeValue.Type.{BasicFuncType, UnitType}
+import com.mistlang.lang.RuntimeValue.Type.{BasicFuncType, BoolType, UnitType}
 
 object Typer {
   def error(s: String) = throw TypeError(s)
@@ -70,16 +70,9 @@ object Typer {
       val lambda = blockLambda(stmts, env)
       IR.Call(lambda, Nil)
     case Ast.If(expr, success, fail) =>
-      val successLambda = blockLambda(success :: Nil, env)
-      val failLambda = blockLambda(fail :: Nil, env)
-      IR.Call(
-        compileExpr(Ast.Ident("if"), env),
-        List(
-          compileExpr(expr, env),
-          successLambda,
-          failLambda
-        )
-      )
+      val resolvedExpr = compileExpr(expr, env)
+      if (resolvedExpr.tpe != BoolType) error(s"If conditional must be boolean")
+      IR.If(resolvedExpr, compileExpr(success, env), compileExpr(fail, env))
     case Ast.Call(func, args, _) =>
       val compiledFunc = compileExpr(func, env)
       IR.Call(compiledFunc, args.map(a => compileExpr(a, env)))

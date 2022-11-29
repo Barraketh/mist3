@@ -13,7 +13,7 @@ object IR {
     override val tpe: Type = UnitType
   }
   case class Def(name: String, l: Lambda) extends IR {
-    override val tpe: Type = l.tpe
+    override val tpe: Type = UnitType
   }
 
   case class Ident(name: String, tpe: Type) extends Expr
@@ -24,6 +24,13 @@ object IR {
         case f: FuncType => f.f(args.map(_.tpe))
         case _           => Typer.error(s"Cannot call $expr")
       }
+    }
+  }
+
+  case class If(expr: Expr, success: Expr, fail: Expr) extends Expr {
+    override val tpe: Type = {
+      if (success.tpe == fail.tpe) success.tpe
+      else AnyType
     }
   }
   case class IntLiteral(i: Int) extends Expr {

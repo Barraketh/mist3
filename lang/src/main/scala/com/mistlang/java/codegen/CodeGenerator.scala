@@ -36,18 +36,6 @@ object CodeGenerator {
     c.expr match {
       case i: Ident if binaryOperators.contains(i.name) =>
         s"(${compile(c.args.head)} ${i.name} ${compile(c.args(1))})"
-      case i: Ident if i.name == "if" =>
-        val successBody = c.args(1).asInstanceOf[Lambda].body
-        val failBody = c.args(2).asInstanceOf[Lambda].body
-
-        val compiledSuccess =
-          if (successBody.length == 1) compile(successBody.head)
-          else compile(Call(c.args(1), Nil))
-        val compiledFailure =
-          if (failBody.length == 1) compile(failBody.head)
-          else compile(Call(c.args(2), Nil))
-
-        s"""((${compile(c.args.head)}) ? $compiledSuccess : $compiledFailure)"""
       case _ =>
         val funcType = c.expr.tpe.asInstanceOf[BasicFuncType]
         val apply = if (funcType.isLambda) ".apply" else ""
@@ -68,6 +56,9 @@ object CodeGenerator {
 
     withReturn.mkString("\n")
   }
+
+  private def compileIf(i: If): String =
+    s"""((${compile(i.expr)}) ? ${compile(i.success)} : ${compile(i.fail)})"""
 
   private def compileFunc(name: String, func: Lambda): String = {
     val (outType, args, body) = {
@@ -96,7 +87,7 @@ object CodeGenerator {
         case i: Ident       => i.name
         case c: Call        => compileCall(c)
         case l: Lambda      => compileLambda(l)
-
+        case i: If          => compileIf(i)
       }
     case l: Let => s"final var ${l.name} = ${compile(l.expr)}"
     case d: Def => compileFunc(d.name, d.l)

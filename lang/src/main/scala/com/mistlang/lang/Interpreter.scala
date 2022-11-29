@@ -26,6 +26,12 @@ object Interpreter {
             val resolvedArgs = c.args.map(evalExpr(env, _))
             f.f(resolvedArgs)
         }
+      case i: IR.If =>
+        val cond = evalExpr(env, i.expr)
+        cond match {
+          case BoolVal(true)  => evalExpr(env, i.success)
+          case BoolVal(false) => evalExpr(env, i.fail)
+        }
     }
   }
 
