@@ -9,6 +9,7 @@ object RuntimeIntrinsics {
     "-" -> Func { case IntVal(a) :: IntVal(b) :: Nil => IntVal(a - b) },
     "*" -> Func { case IntVal(a) :: IntVal(b) :: Nil => IntVal(a * b) },
     "==" -> Func { case (a: Primitive) :: (b: Primitive) :: Nil => BoolVal(a == b) },
+    "get" -> Func { case (a: Record) :: (key: StrVal) :: Nil => a.value(key.value) },
     "Unit" -> UnitVal,
     "Null" -> Null
   )

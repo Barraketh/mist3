@@ -12,6 +12,10 @@ object Interpreter {
       case IR.IntLiteral(i)  => IntVal(i)
       case IR.StrLiteral(s)  => StrVal(s)
       case IR.BoolLiteral(b) => BoolVal(b)
+      case record: IR.Record =>
+        RuntimeValue.Record(
+          record.rows.map(r => r.key -> evalExpr(env, r.value)).toMap
+        )
       case l: Lambda =>
         Func((args: List[RuntimeValue]) => {
           val newEnv = l.tpe.args.map(_._1).zip(args).foldLeft(env.newScope) { case (curEnv, (name, value)) =>
@@ -68,6 +72,7 @@ object RuntimeValue {
   case class StrVal(value: String) extends Primitive
   case class BoolVal(value: Boolean) extends Primitive
   case class IntVal(value: Int) extends Primitive
+  case class Record(value: Map[String, RuntimeValue]) extends RuntimeValue
   case object UnitVal extends Primitive
   case object Null extends Primitive
   case class Func(f: List[RuntimeValue] => RuntimeValue) extends RuntimeValue
@@ -79,6 +84,8 @@ object RuntimeValue {
     case object BoolType extends Type
     case object UnitType extends Type
     case object AnyType extends Type
+
+    case class RecordType(rows: Map[String, Type]) extends Type
 
     sealed trait FuncType extends Type {
       val f: List[Type] => Type

@@ -9,6 +9,9 @@ object TyperIntrinsics {
     "-" -> op(IntType, IntType, IntType),
     "*" -> op(IntType, IntType, IntType),
     "==" -> op(AnyType, AnyType, BoolType),
+    "get" -> TypelevelFunc { case (_: RecordType) :: StrType :: Nil =>
+      AnyType
+    },
     "Unit" -> UnitType,
     "Any" -> AnyType,
     "Int" -> IntType,

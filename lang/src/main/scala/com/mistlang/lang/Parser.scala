@@ -42,7 +42,7 @@ object Grammar {
 
   def ident[_: P] = name.map(s => Ident(s))
 
-  def term[_: P]: P[Expr] = P(str | int | bool | ifP | ident | block)
+  def term[_: P]: P[Expr] = P(str | int | bool | record | ifP | ident | block)
 
   def ifP[_: P]: P[Expr] = P("if" ~/ "(" ~ expr ~ ")" ~ "\n".? ~ expr ~ "\n".? ~ "else" ~ "\n".? ~ expr).map {
     case (cond, succ, fail) => If(cond, succ, fail)
@@ -75,6 +75,16 @@ object Grammar {
 
       }
     )
+  }
+
+  def recordRow[_: P]: P[RecordRow] = (name ~/ ":" ~ expr).map { case (key, value) =>
+    RecordRow(key, value)
+  }
+
+  def record[_: P]: P[Record] = {
+    ("#{" ~~/ recordRow.rep(0, ",") ~~ "}").map { l =>
+      Record(l.toList)
+    }
   }
 
   def valP[_: P] = P("val " ~/ name ~ "=" ~ expr).map { case (n, e) => Val(n, e) }

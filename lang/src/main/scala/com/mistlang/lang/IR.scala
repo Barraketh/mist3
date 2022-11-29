@@ -26,12 +26,16 @@ object IR {
       }
     }
   }
-
   case class If(expr: Expr, success: Expr, fail: Expr) extends Expr {
     override val tpe: Type = {
       if (success.tpe == fail.tpe) success.tpe
       else AnyType
     }
+  }
+
+  case class RecordRow(key: String, value: Expr)
+  case class Record(rows: List[RecordRow]) extends Expr {
+    override val tpe: Type = RecordType(rows.map(r => (r.key, r.value.tpe)).toMap)
   }
   case class IntLiteral(i: Int) extends Expr {
     override val tpe: Type = IntType
