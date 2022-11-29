@@ -2,19 +2,51 @@ package com.mistlang.lang
 
 import com.mistlang.lang.Ast.{FnStmt, Program}
 import com.mistlang.lang.IR.BodyStmt
-import com.mistlang.lang.RuntimeValue.Type
-import com.mistlang.lang.RuntimeValue.Type.{BasicFuncType, BoolType, UnitType}
+import com.mistlang.lang.RuntimeValue.Dict
+import com.mistlang.lang.Types.{BasicFuncType, BoolType, FuncType, UnitType}
 
 object Typer {
   def error(s: String) = throw TypeError(s)
 
-  def checkType(expected: Type, actual: Type, name: String): Unit = {
-    if (expected == Type.AnyType || expected == actual) ()
-    else error(s"Unexpected type for $name - expected $expected, actual $actual")
+  sealed trait TypecheckRes
+  object TypecheckRes {
+    case object Success extends TypecheckRes
+    case class Failure(name: String, expected: RuntimeValue, actual: Option[RuntimeValue]) extends TypecheckRes
   }
-  private def compileLambda(tpe: BasicFuncType, body: Ast.Expr, env: Env[RuntimeValue]) = {
 
-    val newEnv = tpe.args.foldLeft(env.newScope) { case (curEnv, nextArg) =>
+  def checkType(expected: RuntimeValue, actual: RuntimeValue, name: String): TypecheckRes = {
+    if (expected == Types.AnyPrimitive) TypecheckRes.Success
+    else if (expected == actual) TypecheckRes.Success
+    else {
+      (expected, actual) match {
+        case (ed: Dict, ad: Dict) =>
+          ed.fields.foldLeft(TypecheckRes.Success: TypecheckRes) { case (curRes, (fieldName, expectedValue)) =>
+            curRes match {
+              case f: TypecheckRes.Failure => f
+              case _ =>
+                val nextFieldName = name + s".$fieldName"
+                ad.fields.get(fieldName) match {
+                  case Some(actualValue) => checkType(expectedValue, actualValue, nextFieldName)
+                  case None              => TypecheckRes.Failure(nextFieldName, expected, None)
+                }
+            }
+          }
+        case _ => TypecheckRes.Failure(name, expected, Some(actual))
+      }
+    }
+  }
+
+  def validateType(expected: RuntimeValue, actual: RuntimeValue, name: String): Unit = {
+    checkType(expected, actual, name) match {
+      case TypecheckRes.Success => ()
+      case f: TypecheckRes.Failure =>
+        error(s"Failed typecheck for $name at ${f.name}. Expected: $expected, actual: $actual")
+    }
+  }
+
+  private def compileLambda(tpe: Dict, body: Ast.Expr, env: Env[RuntimeValue]) = {
+    val args = tpe("args").asInstanceOf[Dict].fields
+    val newEnv = args.foldLeft(env.newScope) { case (curEnv, nextArg) =>
       curEnv.put(nextArg._1, nextArg._2)
     }
 
@@ -23,24 +55,24 @@ object Typer {
       case _            => compileExpr(body, newEnv) :: Nil
     }
     val computedOut = getOutType(irBody)
-    checkType(tpe.out, computedOut, "out")
+    validateType(tpe("out"), computedOut, "out")
 
     IR.Lambda(irBody, tpe)
   }
 
-  private def getLambdaType(d: Ast.Def, env: Env[RuntimeValue]): BasicFuncType = {
+  private def getLambdaType(d: Ast.Def, env: Env[RuntimeValue]): Dict = {
     val argTypes = d.args.map(arg =>
       Interpreter.evalExpr(env, compileExpr(arg.tpe, env)) match {
-        case tpe: Type => arg.name -> tpe
+        case tpe: Dict => arg.name -> tpe
       }
     )
     val outType = Interpreter.evalExpr(env, compileExpr(d.outType, env)) match {
-      case tpe: Type => tpe
+      case tpe: Dict => tpe
     }
     BasicFuncType(argTypes, outType, isLambda = false)
   }
 
-  private def getOutType(stmts: List[IR]): Type = {
+  private def getOutType(stmts: List[IR]): Dict = {
     if (stmts.isEmpty) UnitType
     else stmts.last.tpe
   }
@@ -61,20 +93,17 @@ object Typer {
 
     case Ast.Ident(name) =>
       val value = env.get(name).getOrElse(error(s"$name not found"))
-      val tpe = value match {
-        case t: RuntimeValue.Type => t
-        case other                => error(s"$other is not a type")
-      }
-      IR.Ident(name, tpe)
+      IR.Ident(name, value.getDict)
     case Ast.Block(stmts) =>
       val lambda = blockLambda(stmts, env)
       IR.Call(lambda, Nil)
     case Ast.If(expr, success, fail) =>
       val resolvedExpr = compileExpr(expr, env)
-      if (resolvedExpr.tpe != BoolType) error(s"If conditional must be boolean")
+      validateType(BoolType, resolvedExpr.tpe, "condition")
       IR.If(resolvedExpr, compileExpr(success, env), compileExpr(fail, env))
     case Ast.Call(func, args, _) =>
       val compiledFunc = compileExpr(func, env)
+      validateType(FuncType, compiledFunc.tpe, "func")
       IR.Call(compiledFunc, args.map(a => compileExpr(a, env)))
     case record: Ast.Record =>
       IR.Record(record.rows.map(row => IR.RecordRow(row.key, compileExpr(row.value, env))))

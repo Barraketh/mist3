@@ -1,33 +1,33 @@
 package com.mistlang.java.codegen
 
-import com.mistlang.lang.IR
 import com.mistlang.lang.IR._
-import com.mistlang.lang.RuntimeValue.Type
-import com.mistlang.lang.RuntimeValue.Type._
+import com.mistlang.lang.RuntimeValue.Dict
+import com.mistlang.lang.Typer.TypecheckRes
+import com.mistlang.lang.Types._
+import com.mistlang.lang.{IR, RuntimeValue, Typer}
 
 object CodeGenerator {
 
-  private def compileType(tpe: Type): String = {
-    tpe match {
-      case IntType  => "Integer"
-      case StrType  => "String"
-      case BoolType => "Boolean"
-      case UnitType => "Unit"
-      case AnyType  => "Object"
-      case f: FuncType =>
-        f match {
-          case b: BasicFuncType      => compileFunctionType(b)
-          case _: Type.TypelevelFunc => ???
-        }
+  private def compileType(tpe: RuntimeValue): String = {
+    def typeMatches(expected: RuntimeValue): Boolean = {
+      Typer.checkType(expected, tpe, "") == TypecheckRes.Success
     }
+
+    if (typeMatches(IntType)) "Integer"
+    else if (typeMatches(StrType)) "String"
+    else if (typeMatches(BoolType)) "Boolean"
+    else if (typeMatches(UnitType)) "Unit"
+    else if (typeMatches(AnyPrimitive)) "Object"
+    else if (typeMatches(FuncType)) compileFunctionType(tpe.getDict)
+    else Typer.error(s"Unknown type ${tpe}")
   }
 
-  private def compileFunctionType(func: BasicFuncType): String = {
-    val argTypes = func.args.map(a => compileType(a._2))
-    val outType = compileType(func.out)
+  private def compileFunctionType(func: Dict): String = {
+    val argTypes = BasicFuncType.getArgs(func).map(a => compileType(a._2)) //func.args.map(a => compileType(a._2))
+    val outType = compileType(func("out"))
 
     val genericParams = argTypes :+ outType
-    s"Function${func.args.length}<${genericParams.mkString(", ")}>"
+    s"Function${argTypes.length}<${genericParams.mkString(", ")}>"
   }
 
   private val binaryOperators = List("==", "+", "-", "*")
@@ -37,8 +37,8 @@ object CodeGenerator {
       case i: Ident if binaryOperators.contains(i.name) =>
         s"(${compile(c.args.head)} ${i.name} ${compile(c.args(1))})"
       case _ =>
-        val funcType = c.expr.tpe.asInstanceOf[BasicFuncType]
-        val apply = if (funcType.isLambda) ".apply" else ""
+        val isLambda = c.expr.tpe("isLambda").getBoolean
+        val apply = if (isLambda) ".apply" else ""
         s"""${compile(c.expr)}$apply(${c.args.map(compile).mkString(", ")})"""
     }
   }
@@ -62,10 +62,9 @@ object CodeGenerator {
 
   private def compileFunc(name: String, func: Lambda): String = {
     val (outType, args, body) = {
-      val funcType = func.tpe
-      val compiledArgs = funcType.args.map(a => s"${compileType(a._2)} ${a._1}").mkString(", ")
+      val compiledArgs = BasicFuncType.getArgs(func.tpe).map(a => s"${compileType(a._2)} ${a._1}").mkString(", ")
       val compiledBody = compileAll(func.body)
-      (funcType.out, compiledArgs, compiledBody)
+      (func.tpe("out"), compiledArgs, compiledBody)
     }
     s"""public ${compileType(outType)} ${name}($args) {
        |  $body

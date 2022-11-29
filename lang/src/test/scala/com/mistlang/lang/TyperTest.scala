@@ -1,7 +1,7 @@
 package com.mistlang.lang
 
 import com.mistlang.lang.RuntimeValue._
-import Type._
+import Types._
 import utest._
 
 object TyperTest extends TestSuite {
@@ -12,7 +12,7 @@ object TyperTest extends TestSuite {
     None
   )
 
-  def run(s: String): Type = {
+  def run(s: String): Dict = {
     val e = FastparseParser.parse(s)
     Typer.compile(e, typerEnv).last.tpe
   }
@@ -20,8 +20,9 @@ object TyperTest extends TestSuite {
   val tests = Tests {
     test("Intrinsic params") {
       def code(param: String) = s"3 + $param"
+      val res = run(code("1"))
 
-      assert(run(code("1")) == IntType)
+      Typer.validateType(IntType, res, "")
       intercept[TypeError](run(code("\"foo\"")))
     }
     test("Regular function params") {
@@ -33,8 +34,7 @@ object TyperTest extends TestSuite {
       }
 
       val res = run(code("1"))
-      println(res)
-      assert(res == IntType)
+      Typer.validateType(IntType, res, "")
       intercept[TypeError](run(code("\"1\"")))
     }
     test("Recursion") {
@@ -50,7 +50,7 @@ object TyperTest extends TestSuite {
          """
       }
 
-      assert(run(code("Int", "Int")) == IntType)
+      Typer.validateType(IntType, run(code("Int", "Int")), "")
       intercept[TypeError](run(code("Any", "Int")))
     }
     test("If") {
