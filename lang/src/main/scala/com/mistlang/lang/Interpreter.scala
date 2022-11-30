@@ -112,15 +112,16 @@ object RuntimeValue {
 
 object Types {
 
+  val AnyType = Dict("typeMarker" -> SymbolVal())
+
   val IntType = Primitive("int")
   val StrType = Primitive("string")
   val BoolType = Primitive("bool")
   val UnitType = Primitive("unit")
   val RecordType = Primitive("record")
   val FuncType = Primitive("function")
-  val AnyPrimitive = Dict()
 
-  private def Primitive(name: String): Dict = Dict("tpe" -> StrVal(name), "hash" -> SymbolVal())
+  private def Primitive(name: String): Dict = AnyType + ("tpe" -> StrVal(name), "hash" -> SymbolVal())
   def IntLiteralType(i: Int): Dict = IntType + ("value" -> IntVal(i))
   def StringLiteralType(s: String): Dict = StrType + ("value" -> StrVal(s))
   def BoolLiteralType(b: Boolean): Dict = BoolType + ("value" -> BoolVal(b))

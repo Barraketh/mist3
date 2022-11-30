@@ -18,30 +18,45 @@ object Typer {
     case class Failure(name: String, expected: RuntimeValue, actual: Option[RuntimeValue]) extends TypecheckRes
   }
 
-  def checkType(expected: RuntimeValue, actual: RuntimeValue, name: String): TypecheckRes = {
-    if (expected == Types.AnyPrimitive) TypecheckRes.Success
-    else if (expected == actual) TypecheckRes.Success
-    else {
-      (expected, actual) match {
-        case (ed: Dict, ad: Dict) =>
-          ed.fields.foldLeft(TypecheckRes.Success: TypecheckRes) { case (curRes, (fieldName, expectedValue)) =>
-            curRes match {
-              case f: TypecheckRes.Failure => f
-              case _ =>
-                val nextFieldName = name + s".$fieldName"
-                ad.fields.get(fieldName) match {
-                  case Some(actualValue) => checkType(expectedValue, actualValue, nextFieldName)
-                  case None              => TypecheckRes.Failure(nextFieldName, expected, None)
-                }
-            }
-          }
-        case _ => TypecheckRes.Failure(name, expected, Some(actual))
-      }
+  def assertType(value: RuntimeValue): Unit = {
+    val err = s"$value is not a type"
+    value match {
+      case d: Dict => assert(Types.intersect(Types.AnyType, d) == Types.AnyType, err)
+      case _       => error(err)
     }
   }
 
+  private def checkTypeRec(expected: RuntimeValue, actual: RuntimeValue, name: String): TypecheckRes = {
+    (expected, actual) match {
+      case (ed: Dict, ad: Dict) =>
+        ed.fields.foldLeft(TypecheckRes.Success: TypecheckRes) { case (curRes, (fieldName, expectedValue)) =>
+          curRes match {
+            case f: TypecheckRes.Failure => f
+            case _ =>
+              val nextFieldName = name + s".$fieldName"
+              ad.fields.get(fieldName) match {
+                case Some(actualValue) => checkTypeRec(expectedValue, actualValue, nextFieldName)
+                case None              => TypecheckRes.Failure(nextFieldName, expected, None)
+              }
+          }
+        }
+      case _ =>
+        if (expected == actual) TypecheckRes.Success
+        else TypecheckRes.Failure(name, expected, Some(actual))
+    }
+  }
+
+  def checkType(expected: RuntimeValue, actual: RuntimeValue): Boolean = {
+    assertType(expected)
+    assertType(actual)
+    checkTypeRec(expected, actual, "") == TypecheckRes.Success
+  }
+
   def validateType(expected: RuntimeValue, actual: RuntimeValue, name: String): Unit = {
-    checkType(expected, actual, name) match {
+    assertType(expected)
+    assertType(actual)
+
+    checkTypeRec(expected, actual, name) match {
       case TypecheckRes.Success => ()
       case f: TypecheckRes.Failure =>
         error(s"Failed typecheck for $name at ${f.name}. Expected: $expected, actual: $actual")

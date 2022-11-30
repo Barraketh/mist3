@@ -9,7 +9,7 @@ object TyperIntrinsics {
     "+" -> op(IntType, IntType, IntType),
     "-" -> op(IntType, IntType, IntType),
     "*" -> op(IntType, IntType, IntType),
-    "==" -> op(AnyPrimitive, AnyPrimitive, BoolType),
+    "==" -> op(AnyType, AnyType, BoolType),
     "get" -> TypeFunc(Func(l => {
       Typer.assert(l.length == 2, s"Unexpected number of params - expected 2, got ${l.length}")
       Typer.validateType(RecordType, l.head, "dict")
@@ -19,7 +19,7 @@ object TyperIntrinsics {
       fields(keyVal)
     })),
     "Unit" -> UnitType,
-    "Any" -> AnyPrimitive,
+    "Any" -> AnyType,
     "Int" -> IntType,
     "String" -> StrType
   )

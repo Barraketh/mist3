@@ -2,22 +2,19 @@ package com.mistlang.java.codegen
 
 import com.mistlang.lang.IR._
 import com.mistlang.lang.RuntimeValue.Dict
-import com.mistlang.lang.Typer.TypecheckRes
 import com.mistlang.lang.Types._
 import com.mistlang.lang.{IR, RuntimeValue, Typer}
 
 object CodeGenerator {
 
   private def compileType(tpe: RuntimeValue): String = {
-    def typeMatches(expected: RuntimeValue): Boolean = {
-      Typer.checkType(expected, tpe, "") == TypecheckRes.Success
-    }
+    def typeMatches(expected: RuntimeValue): Boolean = Typer.checkType(expected, tpe)
 
     if (typeMatches(IntType)) "Integer"
     else if (typeMatches(StrType)) "String"
     else if (typeMatches(BoolType)) "Boolean"
     else if (typeMatches(UnitType)) "Unit"
-    else if (typeMatches(AnyPrimitive)) "Object"
+    else if (typeMatches(AnyType)) "Object"
     else if (typeMatches(FuncType)) compileFunctionType(tpe.getDict)
     else Typer.error(s"Unknown type ${tpe}")
   }
