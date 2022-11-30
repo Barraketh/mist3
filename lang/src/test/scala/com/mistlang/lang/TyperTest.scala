@@ -75,6 +75,14 @@ object TyperTest extends TestSuite {
       assert(run(code("1")) == UnitType)
       intercept[TypeError](run(code("\"1\"")))
     }
+    test("Dicts") {
+      val res = run(
+        """{
+          val a = #{x : 3, y : 5}
+          get(a, "x")
+        }""")
+      Typer.validateType(IntType, res, "")
+    }
   }
 
 }

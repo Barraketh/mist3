@@ -36,6 +36,10 @@ object CodeGenerator {
     c.expr match {
       case i: Ident if binaryOperators.contains(i.name) =>
         s"(${compile(c.args.head)} ${i.name} ${compile(c.args(1))})"
+      case i: Ident if i.name == "get" =>
+        val fields = c.args.head.tpe("fields").getDict.fields.keys.toList.sorted
+        val idx = fields.indexOf(c.args(1).tpe("value").getString)
+        s"${compile(c.args.head)}._$idx()"
       case _ =>
         val isLambda = c.expr.tpe("isLambda").getBoolean
         val apply = if (isLambda) ".apply" else ""
@@ -71,6 +75,13 @@ object CodeGenerator {
        |}""".stripMargin
   }
 
+  private def compileRecord(record: Record): String = {
+    val argTypes = record.tpe("fields").getDict
+    val args = record.rows.sortBy(_.key)
+    val genericTypes = args.map(r => compileType(argTypes(r.key))).mkString(", ")
+    s"new Tuple${args.length}<$genericTypes>(${args.map(a => compile(a.value)).mkString(", ")})"
+  }
+
   private def compileLambda(l: Lambda): String = {
     s"""(new ${compileFunctionType(l.tpe)} () {
        |  ${compileFunc("apply", l)}
@@ -87,6 +98,7 @@ object CodeGenerator {
         case c: Call        => compileCall(c)
         case l: Lambda      => compileLambda(l)
         case i: If          => compileIf(i)
+        case r: Record      => compileRecord(r)
       }
     case l: Let => s"final var ${l.name} = ${compile(l.expr)}"
     case d: Def => compileFunc(d.name, d.l)
@@ -101,6 +113,7 @@ object CodeGenerator {
     val pkgStmt = if (pkg.nonEmpty) s"package ${pkg.mkString(".")};\n" else ""
     s"""$pkgStmt
        |import com.mistlang.java.stdlib.*;
+       |import com.mistlang.java.stdlib.Tuples.*;
        |import com.mistlang.java.stdlib.Functions.*;
        |
        |public class $className {

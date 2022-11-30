@@ -8,6 +8,10 @@ import com.mistlang.lang.Types.{BasicFuncType, BoolType, FuncType, UnitType}
 object Typer {
   def error(s: String) = throw TypeError(s)
 
+  def assert(cond: Boolean, message: String): Unit = {
+    if (!cond) error(message)
+  }
+
   sealed trait TypecheckRes
   object TypecheckRes {
     case object Success extends TypecheckRes

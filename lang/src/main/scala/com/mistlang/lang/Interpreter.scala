@@ -124,8 +124,8 @@ object Types {
   def IntLiteralType(i: Int): Dict = IntType + ("value" -> IntVal(i))
   def StringLiteralType(s: String): Dict = StrType + ("value" -> StrVal(s))
   def BoolLiteralType(b: Boolean): Dict = BoolType + ("value" -> BoolVal(b))
-  def RecordType(values: (String, Dict)*): Dict =
-    Dict("tpe" -> RecordType, "fields" -> Dict(values: _*))
+  def RecordType(values: (String, Dict)*): Dict = RecordType + ("fields" -> Dict(values: _*))
+  def TypeFunc(f: Func): Dict = FuncType + ("f" -> f)
 
   object BasicFuncType {
     def apply(args: List[(String, RuntimeValue)], out: RuntimeValue, isLambda: Boolean): Dict = {
