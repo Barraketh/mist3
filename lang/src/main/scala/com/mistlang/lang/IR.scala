@@ -10,10 +10,10 @@ object IR {
   sealed trait BodyStmt extends IR
   sealed trait Expr extends BodyStmt
   case class Let(name: String, expr: Expr, isMutable: Boolean) extends BodyStmt {
-    override val tpe: Type = UnitType
+    override val tpe: Type = UnitTypeInstance
   }
   case class Set(name: String, expr: Expr) extends BodyStmt {
-    override val tpe: Type = UnitType
+    override val tpe: Type = UnitTypeInstance
   }
   case class Ident(name: String, tpe: Type) extends Expr
   case class Lambda(argNames: List[String], body: List[BodyStmt], tpe: Type) extends Expr

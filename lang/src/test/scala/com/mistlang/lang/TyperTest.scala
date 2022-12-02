@@ -22,7 +22,7 @@ object TyperTest extends TestSuite {
       def code(param: String) = s"3 + $param"
       val res = run(code("1"))
 
-      TypeCheck.validateType(IntType, res, "")
+      TypeCheck.validateType(IntTypeInstance, res, "")
       intercept[TypeError](run(code("\"foo\"")))
     }
     test("Regular function params") {
@@ -34,7 +34,7 @@ object TyperTest extends TestSuite {
       }
 
       val res = run(code("1"))
-      TypeCheck.validateType(IntType, res, "")
+      TypeCheck.validateType(IntTypeInstance, res, "")
       intercept[TypeError](run(code("\"1\"")))
     }
     test("Recursion") {
@@ -50,7 +50,7 @@ object TyperTest extends TestSuite {
          """
       }
 
-      TypeCheck.validateType(IntType, run(code("Int", "Int")), "")
+      TypeCheck.validateType(IntTypeInstance, run(code("Int", "Int")), "")
       intercept[TypeError](run(code("Any", "Int")))
     }
     test("If") {
@@ -63,7 +63,7 @@ object TyperTest extends TestSuite {
            |""".stripMargin
       }
 
-      assert(run(code("2")) == IntType)
+      assert(run(code("2")) == IntTypeInstance)
       intercept[TypeError](run(code("\"1\"")))
     }
     test("Return type") {
@@ -72,7 +72,7 @@ object TyperTest extends TestSuite {
            |def foo(): Int = $param
            |""".stripMargin
 
-      assert(run(code("1")) == UnitType)
+      assert(run(code("1")) == UnitTypeInstance)
       intercept[TypeError](run(code("\"1\"")))
     }
     test("Functions as params") {
@@ -88,7 +88,7 @@ object TyperTest extends TestSuite {
            |""".stripMargin
       }
 
-      TypeCheck.validateType(IntType, run(code("f1")), "")
+      TypeCheck.validateType(IntTypeInstance, run(code("f1")), "")
       intercept[TypeError](run(code("f2")))
     }
   }

@@ -1,6 +1,6 @@
 package com.mistlang.lang
 
-import com.mistlang.lang.RuntimeValue.Types.BasicFuncTypeR
+import com.mistlang.lang.RuntimeValue.Types.BasicFuncType
 import com.mistlang.lang.RuntimeValue._
 
 object Interpreter {
@@ -89,14 +89,9 @@ object RuntimeValue {
   case class Type(tpe: RuntimeType, data: Map[String, RuntimeValue] = Map.empty) extends RuntimeValue {
     def +(pairs: (String, RuntimeValue)*): Type = copy(data = data ++ pairs)
 
-    def isFuncType: Boolean = tpe match {
-      case b: BasicFuncTypeR => true
-      case _                 => false
-    }
-
-    def getFuncType: BasicFuncTypeR = tpe match {
-      case b: BasicFuncTypeR => b
-      case _                 => Typer.error(s"$this is not a func")
+    def getFuncType: BasicFuncType = tpe match {
+      case b: BasicFuncType => b
+      case _                => Typer.error(s"$this is not a func")
     }
   }
 
@@ -104,32 +99,26 @@ object RuntimeValue {
 
   object Types {
 
-    case object AnyTypeR extends RuntimeType
-    case object IntTypeR extends RuntimeType
-    case object StrTypeR extends RuntimeType
-    case object BoolTypeR extends RuntimeType
-    case object UnitTypeR extends RuntimeType
-    case class BasicFuncTypeR(args: List[Type], out: Type) extends RuntimeType
+    case object AnyType extends RuntimeType
+    case object IntType extends RuntimeType
+    case object StrType extends RuntimeType
+    case object BoolType extends RuntimeType
+    case object UnitType extends RuntimeType
+    case class BasicFuncType(args: List[Type], out: Type) extends RuntimeType
 
-    val AnyType: Type = Type(AnyTypeR)
-    val IntType: Type = Type(IntTypeR)
-    val BoolType: Type = Type(BoolTypeR)
-    val StrType: Type = Type(StrTypeR)
-    val UnitType: Type = Type(UnitTypeR)
+    val AnyTypeInstance: Type = Type(AnyType)
+    val IntTypeInstance: Type = Type(IntType)
+    val BoolTypeInstance: Type = Type(BoolType)
+    val StrTypeInstance: Type = Type(StrType)
+    val UnitTypeInstance: Type = Type(UnitType)
 
-    def IntLiteralType(i: Int): Type = IntType + ("value" -> IntVal(i))
-    def StringLiteralType(s: String): Type = StrType + ("value" -> StrVal(s))
-    def BoolLiteralType(b: Boolean): Type = BoolType + ("value" -> BoolVal(b))
+    def IntLiteralType(i: Int): Type = IntTypeInstance + ("value" -> IntVal(i))
+    def StringLiteralType(s: String): Type = StrTypeInstance + ("value" -> StrVal(s))
+    def BoolLiteralType(b: Boolean): Type = BoolTypeInstance + ("value" -> BoolVal(b))
 
-    object BasicFuncType {
-      def apply(args: List[Type], out: Type): Type = {
-        Type(BasicFuncTypeR(args, out))
-      }
-
-      def op(a: Type, b: Type, out: Type): Type = {
-        apply(List(a, b), out)
-      }
-    }
+    def BasicFuncTypeInstance(args: List[Type], out: Type): Type = Type(BasicFuncType(args, out))
+    def op(a: RuntimeType, b: RuntimeType, out: RuntimeType): Type =
+      BasicFuncTypeInstance(List(Type(a), Type(b)), Type(out))
 
   }
 

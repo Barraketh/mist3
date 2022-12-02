@@ -8,7 +8,7 @@ import com.mistlang.lang.RuntimeValue.{BoolVal, RuntimeType, Type}
 object TypeCheck {
   import Typer.error
   def checkType(expected: RuntimeType, actual: RuntimeType): Boolean = {
-    expected == AnyTypeR || expected == actual
+    expected == AnyType || expected == actual
   }
 
   def checkType(expected: RuntimeValue, actual: RuntimeValue): Boolean = {
@@ -24,7 +24,7 @@ object TypeCheck {
   }
 
   def intersect(left: Type, right: Type): Type = {
-    if (left.tpe != right.tpe) AnyType
+    if (left.tpe != right.tpe) AnyTypeInstance
     else Type(left.tpe, left.data.toSet.intersect(right.data.toSet).toMap)
   }
 
@@ -41,8 +41,8 @@ object Typer {
 
   private def compileLambda(d: Ast.Def, fullType: Type, env: Env[RuntimeValue]) = {
     val tpe = fullType.tpe match {
-      case b: BasicFuncTypeR => b
-      case _                 => error(s"${fullType} is not a lambda")
+      case b: BasicFuncType => b
+      case _                => error(s"${fullType} is not a lambda")
     }
     val argNames = d.args.map(_.name)
     val newEnv = argNames.zip(tpe.args).foldLeft(env.newScope) { case (curEnv, nextArg) =>
@@ -64,25 +64,25 @@ object Typer {
     val outType = Interpreter.evalExpr(env, d.outType) match {
       case tpe: Type => tpe
     }
-    BasicFuncType(argTypes, outType)
+    BasicFuncTypeInstance(argTypes, outType)
   }
 
   private def getOutType(stmts: List[IR]): Type = {
-    if (stmts.isEmpty) UnitType
+    if (stmts.isEmpty) UnitTypeInstance
     else stmts.last.tpe
   }
 
   private def blockLambda(stmts: List[Ast.FnStmt], env: Env[RuntimeValue]): IR.Lambda = {
     val compiledStmts = compileAll(stmts, env)._1
     val outType = getOutType(compiledStmts)
-    IR.Lambda(Nil, compiledStmts, BasicFuncType(Nil, outType))
+    IR.Lambda(Nil, compiledStmts, BasicFuncTypeInstance(Nil, outType))
   }
 
   private def compileCall(c: Ast.Call, env: Env[RuntimeValue]): IR.Expr = {
     val compiledFunc = compileExpr(c.func, env)
     val funcTpe = compiledFunc.tpe.tpe match {
-      case f: BasicFuncTypeR => f
-      case _                 => error(s"Cannot call an object of type ${compiledFunc.tpe}")
+      case f: BasicFuncType => f
+      case _                => error(s"Cannot call an object of type ${compiledFunc.tpe}")
     }
     val compiledArgs = c.args.map(a => compileExpr(a, env))
     funcTpe.args.zip(compiledArgs.map(_.tpe)).zipWithIndex.foreach { case ((expected, actual), idx) =>

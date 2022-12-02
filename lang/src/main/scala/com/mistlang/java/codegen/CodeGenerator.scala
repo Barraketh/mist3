@@ -3,23 +3,22 @@ package com.mistlang.java.codegen
 import com.mistlang.lang.IR._
 import com.mistlang.lang.RuntimeValue.Type
 import com.mistlang.lang.RuntimeValue.Types._
-import com.mistlang.lang.{IR, RuntimeValue, TypeCheck, Typer}
+import com.mistlang.lang.{IR, TypeCheck}
 
 object CodeGenerator {
 
   private def compileType(tpe: Type): String = {
-    def typeMatches(expected: RuntimeValue): Boolean = TypeCheck.checkType(expected, tpe)
-
-    if (typeMatches(IntType)) "Integer"
-    else if (typeMatches(StrType)) "String"
-    else if (typeMatches(BoolType)) "Boolean"
-    else if (typeMatches(UnitType)) "Unit"
-    else if (tpe.isFuncType) compileFunctionType(tpe.getFuncType)
-    else if (typeMatches(AnyType)) "Object"
-    else Typer.error(s"Unknown type ${tpe}")
+    tpe.tpe match {
+      case IntType => "Integer"
+      case StrType => "String"
+      case BoolType => "Boolean"
+      case UnitType => "Unit"
+      case AnyType => "Object"
+      case f: BasicFuncType => compileFunctionType(f)
+    }
   }
 
-  private def compileFunctionType(func: BasicFuncTypeR): String = {
+  private def compileFunctionType(func: BasicFuncType): String = {
     val argTypes = func.args.map(compileType) //func.args.map(a => compileType(a._2))
     val outType = compileType(func.out)
 
@@ -41,7 +40,7 @@ object CodeGenerator {
   private def compileAll(stmts: List[IR]): String = {
     val compiled = stmts.map(compile).map(_ + ";")
     val withReturn = stmts.lastOption match {
-      case Some(ir) if ir.tpe != UnitType =>
+      case Some(ir) if ir.tpe != UnitTypeInstance =>
         (compiled.reverse match {
           case head :: tail => s"return $head" :: tail
           case Nil          => throw new RuntimeException("WTF")
