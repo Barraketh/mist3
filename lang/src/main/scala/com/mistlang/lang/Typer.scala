@@ -124,8 +124,8 @@ object Typer {
       val compiledFunc = compileExpr(func, env)
       validateType(FuncType, compiledFunc.tpe, "func")
       IR.Call(compiledFunc, args.map(a => compileExpr(a, env)))
-    case record: Ast.Record =>
-      IR.Record(record.rows.map(row => IR.RecordRow(row.key, compileExpr(row.value, env))))
+    case record: Ast.DictAst =>
+      IR.DictIR(record.rows.map(row => IR.DictRowIR(row.key, compileExpr(row.value, env))))
   }
   private def compileStmt(stmt: Ast.FnStmt, env: Env[RuntimeValue]): (BodyStmt, Env[RuntimeValue]) = stmt match {
     case expr: Ast.Expr => (compileExpr(expr, env), env)

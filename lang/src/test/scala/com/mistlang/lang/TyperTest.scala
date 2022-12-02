@@ -81,7 +81,7 @@ object TyperTest extends TestSuite {
           val a = #{x : 3, y : 5}
           get(a, "x")
         }""")
-      Typer.validateType(IntType, res, "")
+      Typer.validateType(AnyType, res, "")
     }
   }
 

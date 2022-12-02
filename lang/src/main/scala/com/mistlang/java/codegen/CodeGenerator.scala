@@ -33,10 +33,6 @@ object CodeGenerator {
     c.expr match {
       case i: Ident if binaryOperators.contains(i.name) =>
         s"(${compile(c.args.head)} ${i.name} ${compile(c.args(1))})"
-      case i: Ident if i.name == "get" =>
-        val fields = c.args.head.tpe("fields").getDict.fields.keys.toList.sorted
-        val idx = fields.indexOf(c.args(1).tpe("value").getString)
-        s"${compile(c.args.head)}._$idx()"
       case _ =>
         s"""${compile(c.expr)}.apply(${c.args.map(compile).mkString(", ")})"""
     }
@@ -59,27 +55,24 @@ object CodeGenerator {
   private def compileIf(i: If): String =
     s"""((${compile(i.expr)}) ? ${compile(i.success)} : ${compile(i.fail)})"""
 
-  private def compileFunc(name: String, func: Lambda): String = {
+  private def compileFunc(func: Lambda): String = {
     val (outType, args, body) = {
       val compiledArgs = BasicFuncType.getArgs(func.tpe).map(a => s"${compileType(a._2)} ${a._1}").mkString(", ")
       val compiledBody = compileAll(func.body)
       (func.tpe("out"), compiledArgs, compiledBody)
     }
-    s"""public ${compileType(outType)} ${name}($args) {
+    s"""public ${compileType(outType)} apply($args) {
        |  $body
        |}""".stripMargin
   }
 
-  private def compileRecord(record: Record): String = {
-    val argTypes = record.tpe("fields").getDict
-    val args = record.rows.sortBy(_.key)
-    val genericTypes = args.map(r => compileType(argTypes(r.key))).mkString(", ")
-    s"new Tuple${args.length}<$genericTypes>(${args.map(a => compile(a.value)).mkString(", ")})"
+  private def compileRecord(record: DictIR): String = {
+    s"dict(${record.rows.map(row => s"""new Entry("${row.key}", ${compile(row.value)})""").mkString(", ")})"
   }
 
   private def compileLambda(l: Lambda): String = {
     s"""(new ${compileFunctionType(l.tpe)} () {
-       |  ${compileFunc("apply", l)}
+       |  ${compileFunc(l)}
        |})""".stripMargin
   }
 
@@ -88,14 +81,14 @@ object CodeGenerator {
       expr match {
         case i: IntLiteral  => i.i.toString
         case b: BoolLiteral => b.b.toString
-        case s: StrLiteral  => "\"" + s + "\""
+        case s: StrLiteral  => "\"" + s.s + "\""
         case i: Ident =>
           if (Typer.checkType(MutableType, i.tpe)) s"${i.name}.value"
           else i.name
         case c: Call   => compileCall(c)
         case l: Lambda => compileLambda(l)
         case i: If     => compileIf(i)
-        case r: Record => compileRecord(r)
+        case r: DictIR => compileRecord(r)
         case n: Null   => s"(${compileType(n.tpe)})null"
       }
     case l: Let =>
@@ -115,6 +108,8 @@ object CodeGenerator {
        |import com.mistlang.java.stdlib.*;
        |import com.mistlang.java.stdlib.Tuples.*;
        |import com.mistlang.java.stdlib.Functions.*;
+       |
+       |import static com.mistlang.java.stdlib.StdFunctions.*;
        |
        |public class $className {
        |

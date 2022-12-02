@@ -13,8 +13,8 @@ object Ast {
   case class Call(func: Expr, args: List[Expr], isInfixCall: Boolean = false) extends Expr
   case class If(expr: Expr, success: Expr, fail: Expr) extends Expr
 
-  case class RecordRow(key: String, value: Expr)
-  case class Record(rows: List[RecordRow]) extends Expr
+  case class DictRowAst(key: String, value: Expr)
+  case class DictAst(rows: List[DictRowAst]) extends Expr
 
   case class Val(name: String, expr: Expr) extends FnStmt
   case class Def(name: String, args: List[ArgDecl], outType: Expr, body: Expr) extends Ast

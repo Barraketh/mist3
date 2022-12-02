@@ -77,13 +77,13 @@ object Grammar {
     )
   }
 
-  def recordRow[_: P]: P[RecordRow] = (name ~/ ":" ~ expr).map { case (key, value) =>
-    RecordRow(key, value)
+  def recordRow[_: P]: P[DictRowAst] = (name ~/ ":" ~ expr).map { case (key, value) =>
+    DictRowAst(key, value)
   }
 
-  def record[_: P]: P[Record] = {
+  def record[_: P]: P[DictAst] = {
     ("#{" ~~/ recordRow.rep(0, ",") ~~ "}").map { l =>
-      Record(l.toList)
+      DictAst(l.toList)
     }
   }
 

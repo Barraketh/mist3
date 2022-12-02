@@ -27,9 +27,9 @@ object IR {
     override val tpe: Dict = Types.intersect(success.tpe, fail.tpe)
   }
 
-  case class RecordRow(key: String, value: Expr)
-  case class Record(rows: List[RecordRow]) extends Expr {
-    override val tpe: Dict = RecordType(rows.map(r => (r.key, r.value.tpe)): _*)
+  case class DictRowIR(key: String, value: Expr)
+  case class DictIR(rows: List[DictRowIR]) extends Expr {
+    override val tpe: Dict = DictLiteralType(rows.map(r => (r.key, r.value.tpe)): _*)
   }
   case class IntLiteral(i: Int) extends Expr {
     override val tpe: Dict = IntLiteralType(i)

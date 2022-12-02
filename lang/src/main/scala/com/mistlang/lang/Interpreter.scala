@@ -16,7 +16,7 @@ object Interpreter {
       case IR.StrLiteral(s)  => StrVal(s)
       case IR.BoolLiteral(b) => BoolVal(b)
       case _: IR.Null        => NullVal
-      case record: IR.Record =>
+      case record: IR.DictIR =>
         RuntimeValue.Dict(
           record.rows.map(r => r.key -> evalExpr(env, r.value)).toMap
         )
@@ -113,7 +113,7 @@ object Types {
   val StrType = Primitive("string")
   val BoolType = Primitive("bool")
   val UnitType = Primitive("unit")
-  val RecordType = Primitive("record")
+  val DictType = Primitive("record")
   val FuncType = Primitive("function")
 
   val MutableType = AnyType + ("isMutable" -> BoolVal(true))
@@ -122,7 +122,7 @@ object Types {
   def IntLiteralType(i: Int): Dict = IntType + ("value" -> IntVal(i))
   def StringLiteralType(s: String): Dict = StrType + ("value" -> StrVal(s))
   def BoolLiteralType(b: Boolean): Dict = BoolType + ("value" -> BoolVal(b))
-  def RecordType(values: (String, Dict)*): Dict = RecordType + ("fields" -> Dict(values: _*))
+  def DictLiteralType(values: (String, Dict)*): Dict = DictType + ("fields" -> Dict(values: _*))
   def TypeFunc(f: Func): Dict = FuncType + ("f" -> f)
 
   object BasicFuncType {
