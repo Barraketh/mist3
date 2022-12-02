@@ -20,7 +20,7 @@ object CodeGenerator {
   }
 
   private def compileFunctionType(func: BasicFuncTypeR): String = {
-    val argTypes = func.args.map(a => compileType(a._2)) //func.args.map(a => compileType(a._2))
+    val argTypes = func.args.map(compileType) //func.args.map(a => compileType(a._2))
     val outType = compileType(func.out)
 
     val genericParams = argTypes :+ outType
@@ -58,7 +58,8 @@ object CodeGenerator {
   private def compileFunc(func: Lambda): String = {
     val (outType, args, body) = {
       val funcType = func.tpe.getFuncType
-      val compiledArgs = funcType.args.map(a => s"${compileType(a._2)} ${a._1}").mkString(", ")
+      val compiledTypes = funcType.args.map(compileType)
+      val compiledArgs = func.argNames.zip(compiledTypes).map(a => s"${a._2} ${a._1}").mkString(", ")
       val compiledBody = compileAll(func.body)
       (funcType.out, compiledArgs, compiledBody)
     }

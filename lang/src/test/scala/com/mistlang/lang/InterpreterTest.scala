@@ -22,8 +22,7 @@ object InterpreterTest extends TestSuite {
 
   def run(s: String): RuntimeValue = {
     val e = parser.parse(s)
-    val ir = Typer.compile(e, typerEnv)
-    Interpreter.runAll(runtimeEnv, ir)._2
+    Interpreter.runAll(runtimeEnv, e)
   }
 
   val tests = Tests {

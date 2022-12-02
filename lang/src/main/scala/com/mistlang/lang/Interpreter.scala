@@ -5,56 +5,67 @@ import com.mistlang.lang.RuntimeValue._
 
 object Interpreter {
 
-  import IR._
+  import Ast._
 
   def evalExpr(env: Env[RuntimeValue], expr: Expr): RuntimeValue = {
     expr match {
-      case i: Ident          => env.get(i.name).getOrElse(throw new RuntimeException(s"${i.name} not found"))
-      case IR.IntLiteral(i)  => IntVal(i)
-      case IR.StrLiteral(s)  => StrVal(s)
-      case IR.BoolLiteral(b) => BoolVal(b)
-      case _: IR.Null        => NullVal
-      case l: Lambda =>
-        Func((args: List[RuntimeValue]) => {
-          val newEnv =
-            l.tpe.getFuncType.args.map(_._1).zip(args).foldLeft(env.newScope) { case (curEnv, (name, value)) =>
-              curEnv.put(name, value)
-            }
-          runAll(newEnv, l.body)._2
-        })
+      case i: Ident => env.get(i.name).getOrElse(throw new RuntimeException(s"${i.name} not found"))
+      case Ast.Literal(value) =>
+        value match {
+          case i: Int     => IntVal(i)
+          case s: String  => StrVal(s)
+          case b: Boolean => BoolVal(b)
+        }
+
       case c: Call =>
-        val f = evalExpr(env, c.expr)
+        val f = evalExpr(env, c.func)
         f match {
           case f: Func =>
             val resolvedArgs = c.args.map(evalExpr(env, _))
             f.f(resolvedArgs)
         }
-      case i: IR.If =>
+      case i: If =>
         val cond = evalExpr(env, i.expr)
         cond match {
           case BoolVal(true)  => evalExpr(env, i.success)
           case BoolVal(false) => evalExpr(env, i.fail)
         }
+      case b: Block => runAll(env.newScope, b.stmts)
     }
   }
 
-  def run(env: Env[RuntimeValue], stmt: IR): (Env[RuntimeValue], RuntimeValue) = {
+  private def buildFunc(d: Def, env: Env[RuntimeValue]): Func = Func((args: List[RuntimeValue]) => {
+    val newEnv =
+      d.args.map(_.name).zip(args).foldLeft(env.newScope) { case (curEnv, (name, value)) =>
+        curEnv.put(name, value)
+      }
+    evalExpr(newEnv, d.body)
+  })
+
+  def run(env: Env[RuntimeValue], stmt: Ast): (Env[RuntimeValue], RuntimeValue) = {
     stmt match {
       case e: Expr => (env, evalExpr(env, e))
-      case Let(name, expr, mutable) =>
+      case Val(name, expr) =>
         val evaluated = evalExpr(env, expr)
-        (env.put(name, evaluated, mutable), UnitVal)
-      case s: Set =>
-        val evaluated = evalExpr(env, s.expr)
-        env.set(s.name, evaluated)
+        (env.put(name, evaluated), UnitVal)
+      case d: Def =>
+        val func = buildFunc(d, env)
+        env.set(d.name, func)
         (env, UnitVal)
     }
   }
 
-  def runAll(env: Env[RuntimeValue], stmts: List[IR]): (Env[RuntimeValue], RuntimeValue) = {
-    stmts.foldLeft((env, UnitVal: RuntimeValue)) { case ((curEnv, _), nextStmt) =>
-      run(curEnv, nextStmt)
-    }
+  def runAll(env: Env[RuntimeValue], stmts: List[Ast]): RuntimeValue = {
+    stmts
+      .foldLeft((env, UnitVal: RuntimeValue)) { case ((curEnv, _), nextStmt) =>
+        run(curEnv, nextStmt)
+      }
+      ._2
+  }
+
+  def runAll(env: Env[RuntimeValue], program: Program): RuntimeValue = {
+    val newEnv = program.defs.foldLeft(env) { case (curEnv, d) => curEnv.put(d.name, NullVal, mutable = true) }
+    runAll(newEnv, program.defs ::: program.stmts)
   }
 
 }
@@ -98,7 +109,7 @@ object RuntimeValue {
     case object StrTypeR extends RuntimeType
     case object BoolTypeR extends RuntimeType
     case object UnitTypeR extends RuntimeType
-    case class BasicFuncTypeR(args: List[(String, Type)], out: Type) extends RuntimeType
+    case class BasicFuncTypeR(args: List[Type], out: Type) extends RuntimeType
 
     val AnyType: Type = Type(AnyTypeR)
     val IntType: Type = Type(IntTypeR)
@@ -111,12 +122,12 @@ object RuntimeValue {
     def BoolLiteralType(b: Boolean): Type = BoolType + ("value" -> BoolVal(b))
 
     object BasicFuncType {
-      def apply(args: List[(String, Type)], out: Type): Type = {
+      def apply(args: List[Type], out: Type): Type = {
         Type(BasicFuncTypeR(args, out))
       }
 
       def op(a: Type, b: Type, out: Type): Type = {
-        apply(List(("a", a), ("b", b)), out)
+        apply(List(a, b), out)
       }
     }
 

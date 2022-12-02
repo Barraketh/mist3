@@ -96,6 +96,18 @@ object JavaCodeGeneratorTest extends TestSuite {
      """.stripMargin
       } == 8)
     }
+    test("Functions as params") {
+      assert(run {
+        s"""
+           |def f(a: Int, b: Int, myFunc: Func(Int, Int, Int)): Int = myFunc(a, b)
+           |
+           |def f1(a: Int, b: Int): Int = a + b
+           |
+           |f(3, 6, f1)
+           |
+           |""".stripMargin
+      } == 9)
+    }
   }
 
 }

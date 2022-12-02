@@ -39,32 +39,29 @@ object Typer {
     if (!cond) error(message)
   }
 
-  private def compileLambda(fullType: Type, body: Ast.Expr, env: Env[RuntimeValue]) = {
+  private def compileLambda(d: Ast.Def, fullType: Type, env: Env[RuntimeValue]) = {
     val tpe = fullType.tpe match {
       case b: BasicFuncTypeR => b
       case _                 => error(s"${fullType} is not a lambda")
     }
-    val newEnv = tpe.args.foldLeft(env.newScope) { case (curEnv, nextArg) =>
+    val argNames = d.args.map(_.name)
+    val newEnv = argNames.zip(tpe.args).foldLeft(env.newScope) { case (curEnv, nextArg) =>
       curEnv.put(nextArg._1, nextArg._2)
     }
 
-    val irBody = body match {
+    val irBody = d.body match {
       case b: Ast.Block => compileAll(b.stmts, newEnv)._1
-      case _            => compileExpr(body, newEnv) :: Nil
+      case _            => compileExpr(d.body, newEnv) :: Nil
     }
     val computedOut = getOutType(irBody)
     validateType(tpe.out, computedOut, "out")
 
-    IR.Lambda(irBody, Type(tpe))
+    IR.Lambda(argNames, irBody, Type(tpe))
   }
 
   private def getLambdaType(d: Ast.Def, env: Env[RuntimeValue]): Type = {
-    val argTypes = d.args.map(arg =>
-      Interpreter.evalExpr(env, compileExpr(arg.tpe, env)) match {
-        case tpe: Type => arg.name -> tpe
-      }
-    )
-    val outType = Interpreter.evalExpr(env, compileExpr(d.outType, env)) match {
+    val argTypes = d.args.map(arg => Interpreter.evalExpr(env, arg.tpe).getType)
+    val outType = Interpreter.evalExpr(env, d.outType) match {
       case tpe: Type => tpe
     }
     BasicFuncType(argTypes, outType)
@@ -78,7 +75,7 @@ object Typer {
   private def blockLambda(stmts: List[Ast.FnStmt], env: Env[RuntimeValue]): IR.Lambda = {
     val compiledStmts = compileAll(stmts, env)._1
     val outType = getOutType(compiledStmts)
-    IR.Lambda(compiledStmts, BasicFuncType(Nil, outType))
+    IR.Lambda(Nil, compiledStmts, BasicFuncType(Nil, outType))
   }
 
   private def compileCall(c: Ast.Call, env: Env[RuntimeValue]): IR.Expr = {
@@ -88,8 +85,8 @@ object Typer {
       case _                 => error(s"Cannot call an object of type ${compiledFunc.tpe}")
     }
     val compiledArgs = c.args.map(a => compileExpr(a, env))
-    funcTpe.args.zip(compiledArgs.map(_.tpe)).foreach { case ((name, expected), actual) =>
-      validateType(expected, actual, name)
+    funcTpe.args.zip(compiledArgs.map(_.tpe)).zipWithIndex.foreach { case ((expected, actual), idx) =>
+      validateType(expected, actual, s"arg $idx")
     }
     IR.Call(compiledFunc, compiledArgs, funcTpe.out)
   }
@@ -143,7 +140,7 @@ object Typer {
     }
 
     val values = program.defs.map { d =>
-      IR.Set(d.name, compileLambda(tpes(d.name), d.body, newEnv))
+      IR.Set(d.name, compileLambda(d, tpes(d.name), newEnv))
     }
     defs ::: values ::: compileAll(program.stmts, newEnv)._1
   }

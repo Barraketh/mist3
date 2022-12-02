@@ -16,7 +16,7 @@ object IR {
     override val tpe: Type = UnitType
   }
   case class Ident(name: String, tpe: Type) extends Expr
-  case class Lambda(body: List[BodyStmt], tpe: Type) extends Expr
+  case class Lambda(argNames: List[String], body: List[BodyStmt], tpe: Type) extends Expr
   case class Call(expr: Expr, args: List[Expr], tpe: Type) extends Expr
   case class If(expr: Expr, success: Expr, fail: Expr, tpe: Type) extends Expr
   case class IntLiteral(i: Int) extends Expr {
