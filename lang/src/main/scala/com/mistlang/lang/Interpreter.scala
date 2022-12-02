@@ -1,7 +1,7 @@
 package com.mistlang.lang
 
 import com.mistlang.lang.RuntimeValue._
-import com.mistlang.lang.Types.BasicFuncType
+import com.mistlang.lang.Types.{BasicFuncType, UnitType}
 
 import java.util.UUID
 
@@ -15,6 +15,7 @@ object Interpreter {
       case IR.IntLiteral(i)  => IntVal(i)
       case IR.StrLiteral(s)  => StrVal(s)
       case IR.BoolLiteral(b) => BoolVal(b)
+      case _: IR.Null        => NullVal
       case record: IR.Record =>
         RuntimeValue.Dict(
           record.rows.map(r => r.key -> evalExpr(env, r.value)).toMap
@@ -46,24 +47,18 @@ object Interpreter {
   def run(env: Env[RuntimeValue], stmt: IR): (Env[RuntimeValue], RuntimeValue) = {
     stmt match {
       case e: Expr => (env, evalExpr(env, e))
-      case Let(name, expr) =>
+      case Let(name, expr, mutable) =>
         val evaluated = evalExpr(env, expr)
-        (env.put(name, evaluated), UnitVal)
-      case d: Def =>
-        val evaluated = evalExpr(env, d.l)
-        env.set(d.name, evaluated)
+        (env.put(name, evaluated, mutable), UnitVal)
+      case s: Set =>
+        val evaluated = evalExpr(env, s.expr)
+        env.set(s.name, evaluated)
         (env, UnitVal)
     }
   }
 
   def runAll(env: Env[RuntimeValue], stmts: List[IR]): (Env[RuntimeValue], RuntimeValue) = {
-    val startEnv = stmts.foldLeft(env) { case (curEnv, nextStmt) =>
-      nextStmt match {
-        case d: Def => curEnv.put(d.name, Null, mutable = true)
-        case _      => curEnv
-      }
-    }
-    stmts.foldLeft((startEnv, UnitVal: RuntimeValue)) { case ((curEnv, _), nextStmt) =>
+    stmts.foldLeft((env, UnitVal: RuntimeValue)) { case ((curEnv, _), nextStmt) =>
       run(curEnv, nextStmt)
     }
   }
@@ -94,7 +89,7 @@ object RuntimeValue {
   }
 
   case object UnitVal extends Primitive
-  case object Null extends Primitive
+  case object NullVal extends Primitive
   case class Dict(fields: Map[String, RuntimeValue]) extends RuntimeValue {
     def apply(s: String): RuntimeValue = fields(s)
     def +(pair: (String, RuntimeValue)*): Dict = Dict(fields ++ pair)
@@ -120,6 +115,8 @@ object Types {
   val UnitType = Primitive("unit")
   val RecordType = Primitive("record")
   val FuncType = Primitive("function")
+
+  val MutableType = AnyType + ("isMutable" -> BoolVal(true))
 
   private def Primitive(name: String): Dict = AnyType + ("tpe" -> StrVal(name), "hash" -> SymbolVal())
   def IntLiteralType(i: Int): Dict = IntType + ("value" -> IntVal(i))

@@ -14,8 +14,8 @@ object CodeGenerator {
     else if (typeMatches(StrType)) "String"
     else if (typeMatches(BoolType)) "Boolean"
     else if (typeMatches(UnitType)) "Unit"
-    else if (typeMatches(AnyType)) "Object"
     else if (typeMatches(FuncType)) compileFunctionType(tpe.getDict)
+    else if (typeMatches(AnyType)) "Object"
     else Typer.error(s"Unknown type ${tpe}")
   }
 
@@ -38,13 +38,11 @@ object CodeGenerator {
         val idx = fields.indexOf(c.args(1).tpe("value").getString)
         s"${compile(c.args.head)}._$idx()"
       case _ =>
-        val isLambda = c.expr.tpe("isLambda").getBoolean
-        val apply = if (isLambda) ".apply" else ""
-        s"""${compile(c.expr)}$apply(${c.args.map(compile).mkString(", ")})"""
+        s"""${compile(c.expr)}.apply(${c.args.map(compile).mkString(", ")})"""
     }
   }
 
-  private def compileAll(stmts: List[BodyStmt]): String = {
+  private def compileAll(stmts: List[IR]): String = {
     val compiled = stmts.map(compile).map(_ + ";")
     val withReturn = stmts.lastOption match {
       case Some(ir) if ir.tpe != UnitType =>
@@ -91,21 +89,26 @@ object CodeGenerator {
         case i: IntLiteral  => i.i.toString
         case b: BoolLiteral => b.b.toString
         case s: StrLiteral  => "\"" + s + "\""
-        case i: Ident       => i.name
-        case c: Call        => compileCall(c)
-        case l: Lambda      => compileLambda(l)
-        case i: If          => compileIf(i)
-        case r: Record      => compileRecord(r)
+        case i: Ident =>
+          if (Typer.checkType(MutableType, i.tpe)) s"${i.name}.value"
+          else i.name
+        case c: Call   => compileCall(c)
+        case l: Lambda => compileLambda(l)
+        case i: If     => compileIf(i)
+        case r: Record => compileRecord(r)
+        case n: Null   => s"(${compileType(n.tpe)})null"
       }
-    case l: Let => s"final var ${l.name} = ${compile(l.expr)}"
-    case d: Def => compileFunc(d.name, d.l)
+    case l: Let =>
+      val compiledExpr = compile(l.expr)
+      val rhv =
+        if (l.isMutable) s"new MutableRef<${compileType(l.expr.tpe)}>($compiledExpr)"
+        else compiledExpr
+      s"final var ${l.name} = $rhv"
+    case s: IR.Set =>
+      s"${s.name}.set(${compile(s.expr)})"
   }
 
   def compile(asts: List[IR], pkg: List[String], className: String): String = {
-    val defs = asts.collect { case d: Def => d }
-    val body = asts.collect { case b: BodyStmt => b }
-
-    val compiledDefs = defs.map(compile).mkString("\n")
 
     val pkgStmt = if (pkg.nonEmpty) s"package ${pkg.mkString(".")};\n" else ""
     s"""$pkgStmt
@@ -114,10 +117,10 @@ object CodeGenerator {
        |import com.mistlang.java.stdlib.Functions.*;
        |
        |public class $className {
-       |  ${compiledDefs}
        |
        |  public ${compileType(asts.last.tpe)} run() {
-       |    ${compileAll(body)}
+       |
+       |    ${compileAll(asts)}
        |  }
        |}""".stripMargin
   }

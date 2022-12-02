@@ -9,13 +9,12 @@ sealed trait IR {
 object IR {
   sealed trait BodyStmt extends IR
   sealed trait Expr extends BodyStmt
-  case class Let(name: String, expr: Expr) extends BodyStmt {
+  case class Let(name: String, expr: Expr, isMutable: Boolean) extends BodyStmt {
     override val tpe: Dict = UnitType
   }
-  case class Def(name: String, l: Lambda) extends IR {
+  case class Set(name: String, expr: Expr) extends BodyStmt {
     override val tpe: Dict = UnitType
   }
-
   case class Ident(name: String, tpe: Dict) extends Expr
   case class Lambda(body: List[BodyStmt], tpe: Dict) extends Expr
   case class Call(expr: Expr, args: List[Expr]) extends Expr {
@@ -41,4 +40,5 @@ object IR {
   case class BoolLiteral(b: Boolean) extends Expr {
     override val tpe: Dict = BoolLiteralType(b)
   }
+  case class Null(tpe: Dict) extends Expr
 }

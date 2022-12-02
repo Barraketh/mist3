@@ -2,7 +2,7 @@ package com.mistlang.lang
 
 import com.mistlang.lang.Ast.{FnStmt, Program}
 import com.mistlang.lang.IR.BodyStmt
-import com.mistlang.lang.RuntimeValue.Dict
+import com.mistlang.lang.RuntimeValue.{BoolVal, Dict}
 import com.mistlang.lang.Types.{BasicFuncType, BoolType, FuncType, UnitType}
 
 object Typer {
@@ -131,7 +131,7 @@ object Typer {
     case expr: Ast.Expr => (compileExpr(expr, env), env)
     case Ast.Val(name, expr) =>
       val compiledExpr = compileExpr(expr, env)
-      (IR.Let(name, compiledExpr), env.put(name, compiledExpr.tpe))
+      (IR.Let(name, compiledExpr, isMutable = false), env.put(name, compiledExpr.tpe))
   }
 
   private def compileAll(stmts: List[FnStmt], env: Env[RuntimeValue]): (List[BodyStmt], Env[RuntimeValue]) = {
@@ -143,17 +143,21 @@ object Typer {
 
   def compile(program: Program, env: Env[RuntimeValue]): List[IR] = {
     val tpes = program.defs.map { d =>
-      d.name -> getLambdaType(d, env)
+      d.name -> (getLambdaType(d, env) + ("isMutable" -> BoolVal(true)))
     }.toMap
 
     val newEnv = program.defs.foldLeft(env) { case (curEnv, nextDef) =>
       curEnv.put(nextDef.name, tpes(nextDef.name))
     }
 
-    val values = program.defs.map { d =>
-      IR.Def(d.name, compileLambda(tpes(d.name), d.body, newEnv))
+    val defs = program.defs.map { d =>
+      IR.Let(d.name, IR.Null(tpes(d.name)), isMutable = true)
     }
-    values ::: compileAll(program.stmts, newEnv)._1
+
+    val values = program.defs.map { d =>
+      IR.Set(d.name, compileLambda(tpes(d.name), d.body, newEnv))
+    }
+    defs ::: values ::: compileAll(program.stmts, newEnv)._1
   }
 }
 

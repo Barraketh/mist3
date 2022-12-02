@@ -11,6 +11,6 @@ object RuntimeIntrinsics {
     "==" -> Func { case (a: Primitive) :: (b: Primitive) :: Nil => BoolVal(a == b) },
     "get" -> Func { case (a: Dict) :: (key: StrVal) :: Nil => a.fields(key.value) },
     "Unit" -> UnitVal,
-    "Null" -> Null
+    "Null" -> NullVal
   )
 }
