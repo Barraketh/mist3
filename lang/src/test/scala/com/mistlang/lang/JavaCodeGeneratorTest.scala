@@ -96,13 +96,6 @@ object JavaCodeGeneratorTest extends TestSuite {
      """.stripMargin
       } == 8)
     }
-
-    test("Dicts") {
-      assert(run("""{
-          val a = #{x : 3, y : 5}
-          get(a, "x")
-        }""") == 3)
-    }
   }
 
 }

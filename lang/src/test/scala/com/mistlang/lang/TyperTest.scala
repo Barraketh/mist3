@@ -12,7 +12,7 @@ object TyperTest extends TestSuite {
     None
   )
 
-  def run(s: String): Dict = {
+  def run(s: String): Type = {
     val e = FastparseParser.parse(s)
     Typer.compile(e, typerEnv).last.tpe
   }
@@ -22,7 +22,7 @@ object TyperTest extends TestSuite {
       def code(param: String) = s"3 + $param"
       val res = run(code("1"))
 
-      Typer.validateType(IntType, res, "")
+      TypeCheck.validateType(IntType, res, "")
       intercept[TypeError](run(code("\"foo\"")))
     }
     test("Regular function params") {
@@ -34,7 +34,7 @@ object TyperTest extends TestSuite {
       }
 
       val res = run(code("1"))
-      Typer.validateType(IntType, res, "")
+      TypeCheck.validateType(IntType, res, "")
       intercept[TypeError](run(code("\"1\"")))
     }
     test("Recursion") {
@@ -50,7 +50,7 @@ object TyperTest extends TestSuite {
          """
       }
 
-      Typer.validateType(IntType, run(code("Int", "Int")), "")
+      TypeCheck.validateType(IntType, run(code("Int", "Int")), "")
       intercept[TypeError](run(code("Any", "Int")))
     }
     test("If") {
@@ -74,14 +74,6 @@ object TyperTest extends TestSuite {
 
       assert(run(code("1")) == UnitType)
       intercept[TypeError](run(code("\"1\"")))
-    }
-    test("Dicts") {
-      val res = run(
-        """{
-          val a = #{x : 3, y : 5}
-          get(a, "x")
-        }""")
-      Typer.validateType(AnyType, res, "")
     }
   }
 

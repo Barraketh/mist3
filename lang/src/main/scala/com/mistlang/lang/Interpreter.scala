@@ -1,9 +1,7 @@
 package com.mistlang.lang
 
+import com.mistlang.lang.RuntimeValue.Types.BasicFuncTypeR
 import com.mistlang.lang.RuntimeValue._
-import com.mistlang.lang.Types.{BasicFuncType, UnitType}
-
-import java.util.UUID
 
 object Interpreter {
 
@@ -16,14 +14,10 @@ object Interpreter {
       case IR.StrLiteral(s)  => StrVal(s)
       case IR.BoolLiteral(b) => BoolVal(b)
       case _: IR.Null        => NullVal
-      case record: IR.DictIR =>
-        RuntimeValue.Dict(
-          record.rows.map(r => r.key -> evalExpr(env, r.value)).toMap
-        )
       case l: Lambda =>
         Func((args: List[RuntimeValue]) => {
           val newEnv =
-            BasicFuncType.getArgs(l.tpe).map(_._1).zip(args).foldLeft(env.newScope) { case (curEnv, (name, value)) =>
+            l.tpe.getFuncType.args.map(_._1).zip(args).foldLeft(env.newScope) { case (curEnv, (name, value)) =>
               curEnv.put(name, value)
             }
           runAll(newEnv, l.body)._2
@@ -66,113 +60,66 @@ object Interpreter {
 }
 
 sealed trait RuntimeValue {
-  def getInt: Int = throw new RuntimeException(s"$this is not a Int")
-  def getString: String = throw new RuntimeException(s"$this is not a String")
-  def getBoolean: Boolean = throw new RuntimeException(s"$this is not a Boolean")
-  def getDict: Dict = throw new RuntimeException(s"$this is not a Dict")
-  def getFunc: Func = throw new RuntimeException(s"$this is not a Function")
+  def getType: Type = {
+    this match {
+      case t: Type => t
+      case _       => Typer.error(s"$this is not a type")
+    }
+  }
 }
 object RuntimeValue {
   sealed trait Primitive extends RuntimeValue
-  case class StrVal(value: String) extends Primitive {
-    override def getString: String = value
-  }
-  case class BoolVal(value: Boolean) extends Primitive {
-    override def getBoolean: Boolean = value
-  }
-  case class IntVal(value: Int) extends Primitive {
-    override def getInt: Int = value
-  }
-  case class SymbolVal(uuid: UUID) extends Primitive
-  object SymbolVal {
-    def apply() = new SymbolVal(UUID.randomUUID())
-  }
-
+  case class StrVal(value: String) extends Primitive
+  case class BoolVal(value: Boolean) extends Primitive
+  case class IntVal(value: Int) extends Primitive
   case object UnitVal extends Primitive
   case object NullVal extends Primitive
-  case class Dict(fields: Map[String, RuntimeValue]) extends RuntimeValue {
-    def apply(s: String): RuntimeValue = fields(s)
-    def +(pair: (String, RuntimeValue)*): Dict = Dict(fields ++ pair)
+  case class Func(f: List[RuntimeValue] => RuntimeValue) extends RuntimeValue
+  case class Type(tpe: RuntimeType, data: Map[String, RuntimeValue] = Map.empty) extends RuntimeValue {
+    def +(pairs: (String, RuntimeValue)*): Type = copy(data = data ++ pairs)
 
-    override def getDict: Dict = this
-  }
-  object Dict {
-    def apply(values: (String, RuntimeValue)*): Dict = new Dict(values.toMap)
-  }
-  case class Func(f: List[RuntimeValue] => RuntimeValue) extends RuntimeValue {
-    override def getFunc: Func = this
-  }
-
-}
-
-object Types {
-
-  val AnyType = Dict("typeMarker" -> SymbolVal())
-
-  val IntType = Primitive("int")
-  val StrType = Primitive("string")
-  val BoolType = Primitive("bool")
-  val UnitType = Primitive("unit")
-  val DictType = Primitive("record")
-  val FuncType = Primitive("function")
-
-  val MutableType = AnyType + ("isMutable" -> BoolVal(true))
-
-  private def Primitive(name: String): Dict = AnyType + ("tpe" -> StrVal(name), "hash" -> SymbolVal())
-  def IntLiteralType(i: Int): Dict = IntType + ("value" -> IntVal(i))
-  def StringLiteralType(s: String): Dict = StrType + ("value" -> StrVal(s))
-  def BoolLiteralType(b: Boolean): Dict = BoolType + ("value" -> BoolVal(b))
-  def DictLiteralType(values: (String, Dict)*): Dict = DictType + ("fields" -> Dict(values: _*))
-  def TypeFunc(f: Func): Dict = FuncType + ("f" -> f)
-
-  object BasicFuncType {
-    def apply(args: List[(String, RuntimeValue)], out: RuntimeValue, isLambda: Boolean): Dict = {
-      val f = Func((actualArgs: List[RuntimeValue]) => {
-        if (actualArgs.length != args.length)
-          Typer.error(s"Unexpected number of args - expected ${args.length}, got ${actualArgs.length}")
-
-        args.zip(actualArgs).foreach { case ((name, e), a) =>
-          Typer.validateType(e, a, name)
-        }
-        out
-      })
-      FuncType + (List(
-        "args" -> Dict(args.toMap),
-        "indexes" -> Dict(args.zipWithIndex.map { case ((name, _), idx) =>
-          name -> IntVal(idx)
-        }.toMap),
-        "out" -> out,
-        "isLambda" -> BoolVal(isLambda),
-        "f" -> f
-      ): _*)
+    def isFuncType: Boolean = tpe match {
+      case b: BasicFuncTypeR => true
+      case _                 => false
     }
 
-    def getArgs(r: Dict): List[(String, RuntimeValue)] = {
-      val indexes = r("indexes").getDict.fields.map { case (key, idx) => key -> idx.getInt }.toList.sortBy(_._2)
-      val args = r("args").getDict
-      indexes.map { case (key, _) => key -> args(key) }
-    }
-
-    def op(a: Dict, b: Dict, out: Dict): Dict = {
-      apply(List(("a", a), ("b", b)), out, isLambda = false)
+    def getFuncType: BasicFuncTypeR = tpe match {
+      case b: BasicFuncTypeR => b
+      case _                 => Typer.error(s"$this is not a func")
     }
   }
 
-  def intersect(left: Dict, right: Dict): Dict = {
-    val keys = left.fields.keySet.intersect(right.fields.keySet)
-    val matching = keys
-      .map { key =>
-        val leftVal = left(key)
-        val rightVal = right(key)
-        (leftVal, rightVal) match {
-          case (ld: Dict, rd: Dict) => Some(key -> intersect(ld, rd))
-          case (l, r) if l == r     => Some(key -> l)
-          case _                    => None
-        }
+  sealed trait RuntimeType
+
+  object Types {
+
+    case object AnyTypeR extends RuntimeType
+    case object IntTypeR extends RuntimeType
+    case object StrTypeR extends RuntimeType
+    case object BoolTypeR extends RuntimeType
+    case object UnitTypeR extends RuntimeType
+    case class BasicFuncTypeR(args: List[(String, Type)], out: Type) extends RuntimeType
+
+    val AnyType: Type = Type(AnyTypeR)
+    val IntType: Type = Type(IntTypeR)
+    val BoolType: Type = Type(BoolTypeR)
+    val StrType: Type = Type(StrTypeR)
+    val UnitType: Type = Type(UnitTypeR)
+
+    def IntLiteralType(i: Int): Type = IntType + ("value" -> IntVal(i))
+    def StringLiteralType(s: String): Type = StrType + ("value" -> StrVal(s))
+    def BoolLiteralType(b: Boolean): Type = BoolType + ("value" -> BoolVal(b))
+
+    object BasicFuncType {
+      def apply(args: List[(String, Type)], out: Type): Type = {
+        Type(BasicFuncTypeR(args, out))
       }
-      .collect { case Some(pair) => pair }
-      .toMap
-    Dict(matching)
+
+      def op(a: Type, b: Type, out: Type): Type = {
+        apply(List(("a", a), ("b", b)), out)
+      }
+    }
+
   }
 
 }

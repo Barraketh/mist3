@@ -1,27 +1,27 @@
 package com.mistlang.java.codegen
 
 import com.mistlang.lang.IR._
-import com.mistlang.lang.RuntimeValue.Dict
-import com.mistlang.lang.Types._
-import com.mistlang.lang.{IR, RuntimeValue, Typer}
+import com.mistlang.lang.RuntimeValue.Type
+import com.mistlang.lang.RuntimeValue.Types._
+import com.mistlang.lang.{IR, RuntimeValue, TypeCheck, Typer}
 
 object CodeGenerator {
 
-  private def compileType(tpe: RuntimeValue): String = {
-    def typeMatches(expected: RuntimeValue): Boolean = Typer.checkType(expected, tpe)
+  private def compileType(tpe: Type): String = {
+    def typeMatches(expected: RuntimeValue): Boolean = TypeCheck.checkType(expected, tpe)
 
     if (typeMatches(IntType)) "Integer"
     else if (typeMatches(StrType)) "String"
     else if (typeMatches(BoolType)) "Boolean"
     else if (typeMatches(UnitType)) "Unit"
-    else if (typeMatches(FuncType)) compileFunctionType(tpe.getDict)
+    else if (tpe.isFuncType) compileFunctionType(tpe.getFuncType)
     else if (typeMatches(AnyType)) "Object"
     else Typer.error(s"Unknown type ${tpe}")
   }
 
-  private def compileFunctionType(func: Dict): String = {
-    val argTypes = BasicFuncType.getArgs(func).map(a => compileType(a._2)) //func.args.map(a => compileType(a._2))
-    val outType = compileType(func("out"))
+  private def compileFunctionType(func: BasicFuncTypeR): String = {
+    val argTypes = func.args.map(a => compileType(a._2)) //func.args.map(a => compileType(a._2))
+    val outType = compileType(func.out)
 
     val genericParams = argTypes :+ outType
     s"Function${argTypes.length}<${genericParams.mkString(", ")}>"
@@ -57,21 +57,18 @@ object CodeGenerator {
 
   private def compileFunc(func: Lambda): String = {
     val (outType, args, body) = {
-      val compiledArgs = BasicFuncType.getArgs(func.tpe).map(a => s"${compileType(a._2)} ${a._1}").mkString(", ")
+      val funcType = func.tpe.getFuncType
+      val compiledArgs = funcType.args.map(a => s"${compileType(a._2)} ${a._1}").mkString(", ")
       val compiledBody = compileAll(func.body)
-      (func.tpe("out"), compiledArgs, compiledBody)
+      (funcType.out, compiledArgs, compiledBody)
     }
     s"""public ${compileType(outType)} apply($args) {
        |  $body
        |}""".stripMargin
   }
 
-  private def compileRecord(record: DictIR): String = {
-    s"dict(${record.rows.map(row => s"""new Entry("${row.key}", ${compile(row.value)})""").mkString(", ")})"
-  }
-
   private def compileLambda(l: Lambda): String = {
-    s"""(new ${compileFunctionType(l.tpe)} () {
+    s"""(new ${compileFunctionType(l.tpe.getFuncType)} () {
        |  ${compileFunc(l)}
        |})""".stripMargin
   }
@@ -83,12 +80,11 @@ object CodeGenerator {
         case b: BoolLiteral => b.b.toString
         case s: StrLiteral  => "\"" + s.s + "\""
         case i: Ident =>
-          if (Typer.checkType(MutableType, i.tpe)) s"${i.name}.value"
+          if (TypeCheck.isMutable(i.tpe)) s"${i.name}.value"
           else i.name
         case c: Call   => compileCall(c)
         case l: Lambda => compileLambda(l)
         case i: If     => compileIf(i)
-        case r: DictIR => compileRecord(r)
         case n: Null   => s"(${compileType(n.tpe)})null"
       }
     case l: Let =>
