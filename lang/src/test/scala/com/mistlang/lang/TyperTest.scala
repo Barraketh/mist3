@@ -1,7 +1,7 @@
 package com.mistlang.lang
 
+import com.mistlang.lang.RuntimeValue.Types._
 import com.mistlang.lang.RuntimeValue._
-import Types._
 import utest._
 
 object TyperTest extends TestSuite {
@@ -20,6 +20,7 @@ object TyperTest extends TestSuite {
   val tests = Tests {
     test("Intrinsic params") {
       def code(param: String) = s"3 + $param"
+
       val res = run(code("1"))
 
       TypeCheck.validateType(IntTypeInstance, res, "")
@@ -90,6 +91,21 @@ object TyperTest extends TestSuite {
 
       TypeCheck.validateType(IntTypeInstance, run(code("f1")), "")
       intercept[TypeError](run(code("f2")))
+    }
+
+    test("Type tuples") {
+      def code(idx: Int): String = {
+        s"""
+         def foo(a: String): String = a
+
+         val t = Tuple("foo", 1, "baz")
+         val b = at(t, $idx)
+         foo(b)
+        """.stripMargin
+      }
+
+      assert(run(code(0)).tpe == StrType)
+      intercept[TypeError](run(code(1)))
     }
   }
 

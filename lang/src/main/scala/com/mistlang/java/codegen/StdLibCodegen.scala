@@ -17,6 +17,26 @@ object StdLibCodegen {
      """
   }
 
+  val tupleConstructors = {
+    val constructors = (0 until 9).map { i =>
+      val n = i + 1
+      val types = chars.take(n)
+      val typesGeneric = s"<${types.mkString(", ")}>"
+      val paramNames = types.map(_.toLower)
+      val params = types.zip(paramNames).map { case (t, j) => s"$t $j" }.mkString(", ")
+      s"""public static $typesGeneric Tuple$n$typesGeneric apply($params) {
+         |  return new Tuple$n<>(${paramNames.mkString(", ")});
+         |}
+         |""".stripMargin
+    }
+
+    s"""
+       |public static class Tuple {
+       |  ${constructors.mkString("\n")}
+       |}
+       |""".stripMargin
+  }
+
   val functionsClass = {
     val funcDefs = (0 until 10).map { i =>
       val inputTypes = chars.take(i).map(_.toString)
@@ -43,5 +63,9 @@ object StdLibCodegen {
      ${funcDefs.mkString("\n")}
    }
    """
+  }
+
+  def main(args: Array[String]): Unit = {
+    println(tupleConstructors)
   }
 }

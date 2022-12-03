@@ -108,6 +108,16 @@ object JavaCodeGeneratorTest extends TestSuite {
            |""".stripMargin
       } == 9)
     }
+
+    test("Tuples") {
+      assert(run {
+        """
+          |val a = Tuple(1, 2, 3)
+          |at(a, 1)
+          |
+          |""".stripMargin
+      } == 2)
+    }
   }
 
 }

@@ -10,6 +10,8 @@ object RuntimeIntrinsics {
     "*" -> Func { case IntVal(a) :: IntVal(b) :: Nil => IntVal(a * b) },
     "==" -> Func { case (a: Primitive) :: (b: Primitive) :: Nil => BoolVal(a == b) },
     "Unit" -> UnitVal,
-    "Null" -> NullVal
+    "Null" -> NullVal,
+    "Tuple" -> Func { l => TupleVal(l) },
+    "at" -> Func { case (t: TupleVal) :: (idx: IntVal) :: Nil => t.values(idx.value) }
   )
 }

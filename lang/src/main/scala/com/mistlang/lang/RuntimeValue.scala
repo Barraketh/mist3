@@ -16,6 +16,7 @@ object RuntimeValue {
   case class StrVal(value: String) extends Primitive
   case class BoolVal(value: Boolean) extends Primitive
   case class IntVal(value: Int) extends Primitive
+  case class TupleVal(values: List[RuntimeValue]) extends Primitive
   case object UnitVal extends Primitive
   case object NullVal extends Primitive
   case class Func(f: List[RuntimeValue] => RuntimeValue) extends RuntimeValue
@@ -37,7 +38,50 @@ object RuntimeValue {
     case object StrType extends RuntimeType
     case object BoolType extends RuntimeType
     case object UnitType extends RuntimeType
-    case class BasicFuncType(args: List[Type], out: Type) extends RuntimeType
+
+    sealed trait FuncType extends RuntimeType {
+      def validateArgLength(argLength: Int): Unit
+      def getOutType: List[Type] => Type
+    }
+
+    case class BasicFuncType(args: List[Type], out: Type) extends FuncType {
+
+      override def validateArgLength(argLength: Int): Unit = {
+        Typer.assert(argLength == args.length, s"Unexpected number of args - expected ${args.length}, got ${argLength}")
+      }
+
+      override val getOutType: List[Type] => Type = { actualArgs =>
+        args.zip(actualArgs).zipWithIndex.foreach { case ((expected, actual), idx) =>
+          TypeCheck.validateType(expected, actual, s"arg $idx")
+        }
+        out
+      }
+    }
+    case class TypelevelFunc(getOutType: List[Type] => Type) extends FuncType {
+      override def validateArgLength(argLength: Int): Unit = ()
+    }
+    case object At extends FuncType {
+      def getIndexValue: Type => Int = {
+        case Type(IntType, idxData) =>
+          Typer.assert(idxData.contains("value"), "index must be statically known")
+          idxData("value") match {
+            case IntVal(i) => i
+            case _         => Typer.error("Index value must be an integer")
+          }
+        case _ => Typer.error("Index must be of type Int")
+      }
+
+      override def validateArgLength(argLength: Int): Unit =
+        Typer.assert(argLength == 2, s"Unexpected number of args, expected 2, got $argLength")
+
+      override def getOutType: List[Type] => Type = { case Type(TupleType(t), _) :: idx :: Nil =>
+        val indexValue = getIndexValue(idx)
+        Typer.assert(indexValue >= 0 && indexValue < t.length, s"Idx must be between 0 and ${t.length}")
+        t(indexValue)
+      }
+    }
+
+    case class TupleType(args: List[Type]) extends RuntimeType
 
     val AnyTypeInstance: Type = Type(AnyType)
     val IntTypeInstance: Type = Type(IntType)

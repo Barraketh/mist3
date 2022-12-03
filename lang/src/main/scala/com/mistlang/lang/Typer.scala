@@ -80,15 +80,22 @@ object Typer {
 
   private def compileCall(c: Ast.Call, env: Env[RuntimeValue]): IR.Expr = {
     val compiledFunc = compileExpr(c.func, env)
-    val funcTpe = compiledFunc.tpe.tpe match {
-      case f: BasicFuncType => f
-      case _                => error(s"Cannot call an object of type ${compiledFunc.tpe}")
+
+    compiledFunc.tpe.tpe match {
+      case f: FuncType =>
+        f.validateArgLength(c.args.length)
+        val compiledArgs = c.args.map(a => compileExpr(a, env))
+        val outType = f.getOutType(compiledArgs.map(_.tpe))
+        f match {
+          case At =>
+            val idxValue = At.getIndexValue(compiledArgs(1).tpe)
+            IR.At(compiledArgs.head, idxValue, outType)
+          case _ => IR.Call(compiledFunc, compiledArgs, outType)
+        }
+
+      case _ => error(s"Cannot call an object of type ${compiledFunc.tpe}")
     }
-    val compiledArgs = c.args.map(a => compileExpr(a, env))
-    funcTpe.args.zip(compiledArgs.map(_.tpe)).zipWithIndex.foreach { case ((expected, actual), idx) =>
-      validateType(expected, actual, s"arg $idx")
-    }
-    IR.Call(compiledFunc, compiledArgs, funcTpe.out)
+
   }
 
   private def compileExpr(expr: Ast.Expr, env: Env[RuntimeValue]): IR.Expr = expr match {

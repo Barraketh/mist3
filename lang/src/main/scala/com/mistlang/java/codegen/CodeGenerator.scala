@@ -9,11 +9,11 @@ object CodeGenerator {
 
   private def compileType(tpe: Type): String = {
     tpe.tpe match {
-      case IntType => "Integer"
-      case StrType => "String"
-      case BoolType => "Boolean"
-      case UnitType => "Unit"
-      case AnyType => "Object"
+      case IntType          => "Integer"
+      case StrType          => "String"
+      case BoolType         => "Boolean"
+      case UnitType         => "Unit"
+      case AnyType          => "Object"
       case f: BasicFuncType => compileFunctionType(f)
     }
   }
@@ -73,6 +73,10 @@ object CodeGenerator {
        |})""".stripMargin
   }
 
+  private def compileAt(at: At): String = {
+    s"${compile(at.expr)}._${at.idx}()"
+  }
+
   def compile(ast: IR): String = ast match {
     case expr: Expr =>
       expr match {
@@ -85,6 +89,7 @@ object CodeGenerator {
         case c: Call   => compileCall(c)
         case l: Lambda => compileLambda(l)
         case i: If     => compileIf(i)
+        case a: At     => compileAt(a)
         case n: Null   => s"(${compileType(n.tpe)})null"
       }
     case l: Let =>

@@ -1,7 +1,7 @@
 package com.mistlang.lang
 
-import com.mistlang.lang.RuntimeValue.Func
 import com.mistlang.lang.RuntimeValue.Types._
+import com.mistlang.lang.RuntimeValue.{Func, Type}
 
 object TyperIntrinsics {
   val intrinsics: Map[String, RuntimeValue] = Map(
@@ -18,6 +18,8 @@ object TyperIntrinsics {
       val types = l.map(_.getType)
       val args = types.take(l.length - 1)
       BasicFuncTypeInstance(args, types.last)
-    }
+    },
+    "Tuple" -> Type(TypelevelFunc { l => Type(TupleType(l)) }),
+    "at" -> Type(At)
   )
 }

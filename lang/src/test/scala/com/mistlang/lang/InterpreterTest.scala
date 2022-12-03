@@ -83,5 +83,15 @@ object InterpreterTest extends TestSuite {
       } == IntVal(8))
     }
 
+    test("Tuples") {
+      assert(run {
+        """
+          |val a = Tuple(1, 2, 3)
+          |at(a, 1)
+          |
+          |""".stripMargin
+      } == IntVal(2))
+    }
+
   }
 }
