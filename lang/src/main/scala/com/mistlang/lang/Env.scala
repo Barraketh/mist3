@@ -1,20 +1,19 @@
 package com.mistlang.lang
 
 case class Env[T](map: Map[String, EnvValue[T]], parent: Option[Env[T]]) {
-  def put(name: String, value: T, mutable: Boolean = false): Env[T] = {
-    val toPut = if (mutable) Mutable(value) else Immutable(value)
+  def put(name: String, value: T): Env[T] = {
+    val toPut = EnvValue(value)
     Env(map + (name -> toPut), parent)
   }
 
   def set(name: String, newValue: T): Unit = {
     getValue(name) match {
-      case Some(m: Mutable[T]) => m.value = newValue
-      case Some(_)             => throw new RuntimeException(s"failed to set $name - $name is immutable")
-      case None                => throw new RuntimeException(s"failed to set $name - $name not found")
+      case Some(m) => m.value = newValue
+      case None    => throw new RuntimeException(s"failed to set $name - $name not found")
     }
   }
 
-  def getValue(name: String): Option[EnvValue[T]] = map.get(name).orElse(parent.flatMap(_.getValue(name)))
+  private def getValue(name: String): Option[EnvValue[T]] = map.get(name).orElse(parent.flatMap(_.getValue(name)))
 
   def get(name: String): Option[T] = getValue(name).map(_.value)
 
@@ -23,10 +22,10 @@ case class Env[T](map: Map[String, EnvValue[T]], parent: Option[Env[T]]) {
 
 object Env {
   def empty[T]: Env[T] = new Env(Map.empty, None)
+
+  def make[T](values: Map[String, T], parent: Option[Env[T]]): Env[T] = {
+    Env[T](values.map { case (key, v) => key -> EnvValue(v) }, parent)
+  }
 }
 
-sealed trait EnvValue[T] {
-  def value: T
-}
-case class Immutable[T](value: T) extends EnvValue[T]
-case class Mutable[T](var value: T) extends EnvValue[T]
+case class EnvValue[T](var value: T)

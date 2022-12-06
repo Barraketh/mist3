@@ -12,9 +12,9 @@ object JavaCodeGeneratorTest extends TestSuite {
 
   val compiler = ToolProvider.getSystemJavaCompiler
 
-  private val typerEnv = Env(
+  private val typerEnv = Env.make(
     TyperIntrinsics.intrinsics.map { case (name, v) =>
-      name -> Immutable[RuntimeValue](v)
+      name -> v
     },
     None
   )

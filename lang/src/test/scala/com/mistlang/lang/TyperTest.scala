@@ -5,9 +5,9 @@ import com.mistlang.lang.RuntimeValue._
 import utest._
 
 object TyperTest extends TestSuite {
-  private val typerEnv = Env(
+  private val typerEnv = Env.make(
     TyperIntrinsics.intrinsics.map { case (name, v) =>
-      name -> Immutable[RuntimeValue](v)
+      name -> v
     },
     None
   )

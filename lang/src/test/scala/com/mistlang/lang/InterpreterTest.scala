@@ -6,16 +6,16 @@ import utest._
 object InterpreterTest extends TestSuite {
   val parser = FastparseParser
 
-  val runtimeEnv = Env(
+  val runtimeEnv = Env.make(
     RuntimeIntrinsics.intrinsics.map { case (name, v) =>
-      name -> Immutable[RuntimeValue](v)
+      name -> v
     },
     None
   )
 
-  val typerEnv = Env(
+  val typerEnv = Env.make(
     TyperIntrinsics.intrinsics.map { case (name, v) =>
-      name -> Immutable[RuntimeValue](v)
+      name -> v
     },
     None
   )

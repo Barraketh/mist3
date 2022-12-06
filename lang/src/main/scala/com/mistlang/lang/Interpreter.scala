@@ -63,7 +63,7 @@ object Interpreter {
   }
 
   def runAll(env: Env[RuntimeValue], program: Program): RuntimeValue = {
-    val newEnv = program.defs.foldLeft(env) { case (curEnv, d) => curEnv.put(d.name, NullVal, mutable = true) }
+    val newEnv = program.defs.foldLeft(env) { case (curEnv, d) => curEnv.put(d.name, NullVal) }
     runAll(newEnv, program.defs ::: program.stmts)
   }
 
