@@ -7,6 +7,8 @@ import com.mistlang.lang.RuntimeValue.{BoolVal, RuntimeType, Type}
 
 object TypeCheck {
   import Typer.error
+  type TypeEnv = Env[RuntimeValue]
+
   def checkType(expected: RuntimeType, actual: RuntimeType): Boolean = {
     expected == AnyType || expected == actual
   }
@@ -39,7 +41,7 @@ object Typer {
     if (!cond) error(message)
   }
 
-  private def compileLambda(d: Ast.Def, fullType: Type, env: Env[RuntimeValue]) = {
+  private def compileLambda(d: Ast.Def, fullType: Type, env: TypeEnv) = {
     val tpe = fullType.tpe match {
       case b: BasicFuncType => b
       case _                => error(s"${fullType} is not a lambda")
@@ -59,7 +61,7 @@ object Typer {
     IR.Lambda(argNames, irBody, Type(tpe))
   }
 
-  private def getLambdaType(d: Ast.Def, env: Env[RuntimeValue]): Type = {
+  private def getLambdaType(d: Ast.Def, env: TypeEnv): Type = {
     val argTypes = d.args.map(arg => Interpreter.evalExpr(env, arg.tpe).getType)
     val outType = Interpreter.evalExpr(env, d.outType) match {
       case tpe: Type => tpe
@@ -72,13 +74,13 @@ object Typer {
     else stmts.last.tpe
   }
 
-  private def blockLambda(stmts: List[Ast.FnStmt], env: Env[RuntimeValue]): IR.Lambda = {
+  private def blockLambda(stmts: List[Ast.FnStmt], env: TypeEnv): IR.Lambda = {
     val compiledStmts = compileAll(stmts, env)._1
     val outType = getOutType(compiledStmts)
     IR.Lambda(Nil, compiledStmts, BasicFuncTypeInstance(Nil, outType))
   }
 
-  private def compileCall(c: Ast.Call, env: Env[RuntimeValue]): IR.Expr = {
+  private def compileCall(c: Ast.Call, env: TypeEnv): IR.Expr = {
     val compiledFunc = compileExpr(c.func, env)
 
     compiledFunc.tpe.tpe match {
@@ -98,7 +100,7 @@ object Typer {
 
   }
 
-  private def compileExpr(expr: Ast.Expr, env: Env[RuntimeValue]): IR.Expr = expr match {
+  private def compileExpr(expr: Ast.Expr, env: TypeEnv): IR.Expr = expr match {
     case Ast.Literal(value) =>
       value match {
         case i: Int     => IR.IntLiteral(i)
@@ -119,21 +121,21 @@ object Typer {
       IR.If(resolvedExpr, compiledSuccess, compiledFail, intersect(compiledSuccess.tpe, compiledFail.tpe))
     case c: Ast.Call => compileCall(c, env)
   }
-  private def compileStmt(stmt: Ast.FnStmt, env: Env[RuntimeValue]): (BodyStmt, Env[RuntimeValue]) = stmt match {
+  private def compileStmt(stmt: Ast.FnStmt, env: TypeEnv): (BodyStmt, TypeEnv) = stmt match {
     case expr: Ast.Expr => (compileExpr(expr, env), env)
     case Ast.Val(name, expr) =>
       val compiledExpr = compileExpr(expr, env)
       (IR.Let(name, compiledExpr, isMutable = false), env.put(name, compiledExpr.tpe))
   }
 
-  private def compileAll(stmts: List[FnStmt], env: Env[RuntimeValue]): (List[BodyStmt], Env[RuntimeValue]) = {
+  private def compileAll(stmts: List[FnStmt], env: TypeEnv): (List[BodyStmt], TypeEnv) = {
     stmts.foldLeft((Nil: List[BodyStmt], env)) { case ((curStmts, curEnv), nextStmt) =>
       val compiled = compileStmt(nextStmt, curEnv)
       (curStmts :+ compiled._1, compiled._2)
     }
   }
 
-  def compile(program: Program, env: Env[RuntimeValue]): List[IR] = {
+  def compile(program: Program, env: TypeEnv): List[IR] = {
     val tpes = program.defs.map { d =>
       d.name -> (getLambdaType(d, env) + ("isMutable" -> BoolVal(true)))
     }.toMap
