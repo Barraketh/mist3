@@ -1,100 +1,61 @@
 package com.mistlang.lang
 
-import com.mistlang.lang.Ast.{FnStmt, Program}
-import com.mistlang.lang.IR.BodyStmt
-import com.mistlang.lang.RuntimeValue.Types._
-import com.mistlang.lang.RuntimeValue.{BoolVal, RuntimeType, Type}
+import com.mistlang.lang.RuntimeValue.Type
+import com.mistlang.lang.RuntimeValue.Types.{AnyType, FuncType, UnitType}
 
 object TypeCheck {
-  import Typer.error
-  type TypeEnv = Env[RuntimeValue]
 
-  def checkType(expected: RuntimeType, actual: RuntimeType): Boolean = {
+  def checkType(expected: Type, actual: Type): Boolean = {
     expected == AnyType || expected == actual
   }
-
-  def checkType(expected: RuntimeValue, actual: RuntimeValue): Boolean = {
-    (expected, actual) match {
-      case (et: Type, at: Type) => checkType(et.tpe, at.tpe)
-      case _                    => error(s"Both $expected and $actual must be types")
-    }
-  }
-
-  def validateType(expected: RuntimeValue, actual: RuntimeValue, name: String): Unit = {
+  def validateType(expected: Type, actual: Type, name: String): Unit = {
     if (checkType(expected, actual)) ()
-    else error(s"Failed typecheck for $name. Expected: $expected, actual: $actual")
+    else Typer.error(s"Failed typecheck for $name. Expected: $expected, actual: $actual")
   }
-
-  def intersect(left: Type, right: Type): Type = {
-    if (left.tpe != right.tpe) AnyTypeInstance
-    else Type(left.tpe, left.data.toSet.intersect(right.data.toSet).toMap)
-  }
-
-  def isMutable(tpe: Type): Boolean = tpe.data.contains("isMutable")
 }
-
 object Typer {
-  import TypeCheck._
+  type TypeEnv = Env[RuntimeValue]
+
   def error(s: String) = throw TypeError(s)
 
-  def assert(cond: Boolean, message: String): Unit = {
-    if (!cond) error(message)
-  }
+  private def compileDef(d: Ast.Def, funcType: FuncType, env: TypeEnv): IR.Def = {
 
-  private def compileLambda(d: Ast.Def, fullType: Type, env: TypeEnv) = {
-    val tpe = fullType.tpe match {
-      case b: BasicFuncType => b
-      case _                => error(s"${fullType} is not a lambda")
-    }
     val argNames = d.args.map(_.name)
-    val newEnv = argNames.zip(tpe.args).foldLeft(env.newScope) { case (curEnv, nextArg) =>
+    val newEnv = argNames.zip(funcType.args).foldLeft(env.newScope) { case (curEnv, nextArg) =>
       curEnv.put(nextArg._1, nextArg._2)
     }
+    val irBody = compileAll(d.body, newEnv)._1
+    val outType = irBody.lastOption.map(_.tpe).getOrElse(UnitType)
+    TypeCheck.validateType(funcType.out, outType, "out")
 
-    val irBody = d.body match {
-      case b: Ast.Block => compileAll(b.stmts, newEnv)._1
-      case _            => compileExpr(d.body, newEnv) :: Nil
-    }
-    val computedOut = getOutType(irBody)
-    validateType(tpe.out, computedOut, "out")
-
-    IR.Lambda(argNames, irBody, Type(tpe))
+    IR.Def(
+      d.name,
+      d.args.zip(funcType.args).map { case (arg, tpe) => IR.Arg(arg.name, tpe) },
+      funcType.out,
+      irBody
+    )
   }
 
-  private def getLambdaType(d: Ast.Def, env: TypeEnv): Type = {
-    val argTypes = d.args.map(arg => Interpreter.evalExpr(env, arg.tpe).getType)
+  private def getFuncType(d: Ast.Def, env: TypeEnv): FuncType = {
+    val argTypes = d.args.map { arg =>
+      Interpreter.evalExpr(env, arg.tpe) match { case t: Type => t }
+    }
     val outType = Interpreter.evalExpr(env, d.outType) match {
       case tpe: Type => tpe
     }
-    BasicFuncTypeInstance(argTypes, outType)
-  }
-
-  private def getOutType(stmts: List[IR]): Type = {
-    if (stmts.isEmpty) UnitTypeInstance
-    else stmts.last.tpe
-  }
-
-  private def blockLambda(stmts: List[Ast.FnStmt], env: TypeEnv): IR.Lambda = {
-    val compiledStmts = compileAll(stmts, env)._1
-    val outType = getOutType(compiledStmts)
-    IR.Lambda(Nil, compiledStmts, BasicFuncTypeInstance(Nil, outType))
+    FuncType(argTypes, outType)
   }
 
   private def compileCall(c: Ast.Call, env: TypeEnv): IR.Expr = {
     val compiledFunc = compileExpr(c.func, env)
 
-    compiledFunc.tpe.tpe match {
+    compiledFunc.tpe match {
       case f: FuncType =>
-        f.validateArgLength(c.args.length)
         val compiledArgs = c.args.map(a => compileExpr(a, env))
-        val outType = f.getOutType(compiledArgs.map(_.tpe))
-        f match {
-          case At =>
-            val idxValue = At.getIndexValue(compiledArgs(1).tpe)
-            IR.At(compiledArgs.head, idxValue, outType)
-          case _ => IR.Call(compiledFunc, compiledArgs, outType)
+        f.args.zip(compiledArgs).foreach { case (expectedType, arg) =>
+          TypeCheck.validateType(expectedType, arg.tpe, "")
         }
-
+        IR.Call(compiledFunc, compiledArgs, f.out)
       case _ => error(s"Cannot call an object of type ${compiledFunc.tpe}")
     }
 
@@ -109,49 +70,44 @@ object Typer {
       }
 
     case Ast.Ident(name) =>
-      val value = env.get(name).getOrElse(error(s"$name not found"))
-      IR.Ident(name, value.getType)
-    case Ast.Block(stmts) =>
-      val lambda = blockLambda(stmts, env)
-      IR.Call(lambda, Nil, getOutType(lambda.body))
+      val value = env.get(name).getOrElse(error(s"$name not found")) match {
+        case t: Type => t
+      }
+      IR.Ident(name, value)
     case Ast.If(expr, success, fail) =>
       val resolvedExpr = compileExpr(expr, env)
       val compiledSuccess = compileExpr(success, env)
       val compiledFail = compileExpr(fail, env)
-      IR.If(resolvedExpr, compiledSuccess, compiledFail, intersect(compiledSuccess.tpe, compiledFail.tpe))
+      IR.If(resolvedExpr, compiledSuccess, compiledFail)
     case c: Ast.Call => compileCall(c, env)
   }
-  private def compileStmt(stmt: Ast.FnStmt, env: TypeEnv): (BodyStmt, TypeEnv) = stmt match {
+
+  private def compileStmt(stmt: Ast.BodyStmt, env: TypeEnv): (IR.BodyStmt, TypeEnv) = stmt match {
     case expr: Ast.Expr => (compileExpr(expr, env), env)
     case Ast.Val(name, expr) =>
       val compiledExpr = compileExpr(expr, env)
-      (IR.Let(name, compiledExpr, isMutable = false), env.put(name, compiledExpr.tpe))
+      (IR.Let(name, compiledExpr), env.put(name, compiledExpr.tpe))
   }
 
-  private def compileAll(stmts: List[FnStmt], env: TypeEnv): (List[BodyStmt], TypeEnv) = {
-    stmts.foldLeft((Nil: List[BodyStmt], env)) { case ((curStmts, curEnv), nextStmt) =>
+  private def compileAll(stmts: List[Ast.BodyStmt], env: TypeEnv): (List[IR.BodyStmt], TypeEnv) = {
+    stmts.foldLeft((Nil: List[IR.BodyStmt], env)) { case ((curStmts, curEnv), nextStmt) =>
       val compiled = compileStmt(nextStmt, curEnv)
       (curStmts :+ compiled._1, compiled._2)
     }
   }
 
-  def compile(program: Program, env: TypeEnv): List[IR] = {
+  def compile(program: Ast.Program, env: TypeEnv): IR.Program = {
     val tpes = program.defs.map { d =>
-      d.name -> (getLambdaType(d, env) + ("isMutable" -> BoolVal(true)))
+      d.name -> getFuncType(d, env)
     }.toMap
 
     val newEnv = program.defs.foldLeft(env) { case (curEnv, nextDef) =>
       curEnv.put(nextDef.name, tpes(nextDef.name))
     }
 
-    val defs = program.defs.map { d =>
-      IR.Let(d.name, IR.Null(tpes(d.name)), isMutable = true)
-    }
+    val defs = program.defs.map(d => compileDef(d, tpes(d.name), newEnv))
 
-    val values = program.defs.map { d =>
-      IR.Set(d.name, compileLambda(d, tpes(d.name), newEnv))
-    }
-    defs ::: values ::: compileAll(program.stmts, newEnv)._1
+    IR.Program(defs, compileAll(program.stmts, newEnv)._1)
   }
 }
 

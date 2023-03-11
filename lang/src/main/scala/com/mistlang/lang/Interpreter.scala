@@ -29,16 +29,16 @@ object Interpreter {
           case BoolVal(true)  => evalExpr(env, i.success)
           case BoolVal(false) => evalExpr(env, i.fail)
         }
-      case b: Block => runAll(env.newScope, b.stmts)
     }
   }
 
   private def buildFunc(d: Def, env: Env[RuntimeValue]): Func = Func((args: List[RuntimeValue]) => {
-    val newEnv =
+    val newEnv = {
       d.args.map(_.name).zip(args).foldLeft(env.newScope) { case (curEnv, (name, value)) =>
         curEnv.put(name, value)
       }
-    evalExpr(newEnv, d.body)
+    }
+    runAll(newEnv.newScope, d.body)
   })
 
   def run(env: Env[RuntimeValue], stmt: Ast): (Env[RuntimeValue], RuntimeValue) = {
@@ -63,7 +63,7 @@ object Interpreter {
   }
 
   def runAll(env: Env[RuntimeValue], program: Program): RuntimeValue = {
-    val newEnv = program.defs.foldLeft(env) { case (curEnv, d) => curEnv.put(d.name, NullVal) }
+    val newEnv = program.defs.foldLeft(env) { case (curEnv, d) => curEnv.put(d.name, UnitVal) }
     runAll(newEnv, program.defs ::: program.stmts)
   }
 

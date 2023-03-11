@@ -14,7 +14,7 @@ object TyperTest extends TestSuite {
 
   def run(s: String): Type = {
     val e = FastparseParser.parse(s)
-    Typer.compile(e, typerEnv).last.tpe
+    Typer.compile(e, typerEnv).body.lastOption.map(_.tpe).getOrElse(UnitType)
   }
 
   val tests = Tests {
@@ -23,7 +23,7 @@ object TyperTest extends TestSuite {
 
       val res = run(code("1"))
 
-      TypeCheck.validateType(IntTypeInstance, res, "")
+      TypeCheck.validateType(IntType, res, "")
       intercept[TypeError](run(code("\"foo\"")))
     }
     test("Regular function params") {
@@ -35,7 +35,7 @@ object TyperTest extends TestSuite {
       }
 
       val res = run(code("1"))
-      TypeCheck.validateType(IntTypeInstance, res, "")
+      TypeCheck.validateType(IntType, res, "")
       intercept[TypeError](run(code("\"1\"")))
     }
     test("Recursion") {
@@ -51,7 +51,7 @@ object TyperTest extends TestSuite {
          """
       }
 
-      TypeCheck.validateType(IntTypeInstance, run(code("Int", "Int")), "")
+      TypeCheck.validateType(IntType, run(code("Int", "Int")), "")
       intercept[TypeError](run(code("Any", "Int")))
     }
     test("If") {
@@ -64,7 +64,7 @@ object TyperTest extends TestSuite {
            |""".stripMargin
       }
 
-      assert(run(code("2")) == IntTypeInstance)
+      assert(run(code("2")) == IntType)
       intercept[TypeError](run(code("\"1\"")))
     }
     test("Return type") {
@@ -73,40 +73,25 @@ object TyperTest extends TestSuite {
            |def foo(): Int = $param
            |""".stripMargin
 
-      assert(run(code("1")) == UnitTypeInstance)
+      assert(run(code("1")) == UnitType)
       intercept[TypeError](run(code("\"1\"")))
     }
-    test("Functions as params") {
-      def code(param: String) = {
-        s"""
-           |def f(a: Int, b: Int, myFunc: Func(Int, Int, Int)): Int = myFunc(a, b)
-           |
-           |def f1(a: Int, b: Int): Int = a + b
-           |def f2(a: Int, b: String): Int = a
-           |
-           |f(3, 6, $param)
-           |
-           |""".stripMargin
-      }
-
-      TypeCheck.validateType(IntTypeInstance, run(code("f1")), "")
-      intercept[TypeError](run(code("f2")))
-    }
-
-    test("Type tuples") {
-      def code(idx: Int): String = {
-        s"""
-         def foo(a: String): String = a
-
-         val t = Tuple("foo", 1, "baz")
-         val b = at(t, $idx)
-         foo(b)
-        """.stripMargin
-      }
-
-      assert(run(code(0)).tpe == StrType)
-      intercept[TypeError](run(code(1)))
-    }
+//    test("Functions as params") {
+//      def code(param: String) = {
+//        s"""
+//           |def f(a: Int, b: Int, myFunc: Func(Int, Int, Int)): Int = myFunc(a, b)
+//           |
+//           |def f1(a: Int, b: Int): Int = a + b
+//           |def f2(a: Int, b: String): Int = a
+//           |
+//           |f(3, 6, $param)
+//           |
+//           |""".stripMargin
+//      }
+//
+//      TypeCheck.validateType(IntType, run(code("f1")), "")
+//      intercept[TypeError](run(code("f2")))
+//    }
   }
 
 }

@@ -42,7 +42,7 @@ object Grammar {
 
   def ident[_: P] = name.map(s => Ident(s))
 
-  def term[_: P]: P[Expr] = P(str | int | bool | ifP | ident | block)
+  def term[_: P]: P[Expr] = P(str | int | bool | ifP | ident)
 
   def ifP[_: P]: P[Expr] = P("if" ~/ "(" ~ expr ~ ")" ~ "\n".? ~ expr ~ "\n".? ~ "else" ~ "\n".? ~ expr).map {
     case (cond, succ, fail) => If(cond, succ, fail)
@@ -78,7 +78,7 @@ object Grammar {
   }
 
   def valP[_: P] = P("val " ~/ name ~ "=" ~ expr).map { case (n, e) => Val(n, e) }
-  def defP[_: P] = P("def " ~/ name ~ argDeclList ~/ (":" ~ expr) ~/ ("=" ~ expr))
+  def defP[_: P] = P("def " ~/ name ~ argDeclList ~/ (":" ~ expr) ~/ ("=" ~ (block | expr.map(List(_)))))
     .map { case (n, args, outType, body) =>
       Def(n, args, outType, body)
     }
@@ -89,7 +89,7 @@ object Grammar {
 
   def stmt[_: P] = P(valP | expr)
 
-  def block[_: P] = P("{" ~/ stmts ~ "}").map(stmts => Block(stmts))
+  def block[_: P] = P("{" ~/ stmts ~ "}")
 
   def stmts[_: P] = P("\n".rep ~ stmt.rep(0, "\n".rep(1)) ~ "\n".rep).map(_.toList)
 

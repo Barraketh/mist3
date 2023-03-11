@@ -32,43 +32,6 @@ object InterpreterTest extends TestSuite {
       assert(res == IntVal(9))
     }
 
-    test("Block") {
-      assert(
-        run(
-          """{
-            | val a = 3
-            | val b = 6
-            | a + b
-            |}""".stripMargin
-        ) == IntVal(9)
-      )
-
-      assert(
-        run(
-          """{
-            | val a = 3
-            | val b = {
-            |   val a = 7
-            |   a + 3
-            | }
-            | a + b
-            |}""".stripMargin
-        ) == IntVal(13)
-      )
-
-      assert(
-        run(
-          """{
-            |val a = 3
-            |val b = {
-            | a + 6
-            |}
-            |a + b
-            |}""".stripMargin
-        ) == IntVal(12)
-      )
-    }
-
     test("Recursion") {
       assert(run {
         """
@@ -83,15 +46,6 @@ object InterpreterTest extends TestSuite {
       } == IntVal(8))
     }
 
-    test("Tuples") {
-      assert(run {
-        """
-          |val a = Tuple(1, 2, 3)
-          |at(a, 1)
-          |
-          |""".stripMargin
-      } == IntVal(2))
-    }
 
   }
 }
