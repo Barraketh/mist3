@@ -101,22 +101,29 @@ object Typer {
 
   def toInterpreterExpr(e: Ast.Expr): InterpreterAst.Expr[Type] = e match {
     case Ast.Ident(name) => InterpreterAst.Ident(name)
+    case c: Ast.Call     => InterpreterAst.Call(toInterpreterExpr(c.func), c.args.map(toInterpreterExpr))
     case _               => error("Only type refs currently supported in type expressions")
   }
 
-  private val intrinsics: Map[String, Type] = Map(
-    "+" -> FuncType(List(IntType, IntType), IntType),
-    "-" -> FuncType(List(IntType, IntType), IntType),
-    "*" -> FuncType(List(IntType, IntType), IntType),
-    "==" -> FuncType(List(AnyType, AnyType), BoolType),
-    "Unit" -> UnitType,
-    "Any" -> AnyType,
-    "Int" -> IntType,
-    "String" -> StrType
+  private val intrinsics: Map[String, RuntimeValue[Type]] = Map(
+    "+" -> Value(FuncType(List(IntType, IntType), IntType)),
+    "-" -> Value(FuncType(List(IntType, IntType), IntType)),
+    "*" -> Value(FuncType(List(IntType, IntType), IntType)),
+    "==" -> Value(FuncType(List(AnyType, AnyType), BoolType)),
+    "Unit" -> Value(UnitType),
+    "Any" -> Value(AnyType),
+    "Int" -> Value(IntType),
+    "String" -> Value(StrType),
+    "Func" -> RuntimeValue.Func[Type](args => {
+      val tpes = args.collect { case RuntimeValue.Value(t) =>
+        t
+      }
+      RuntimeValue.Value(FuncType(tpes.take(tpes.length - 1), tpes.last))
+    })
   )
 
   private val typerEnv = Env.make(
-    intrinsics.map { case (name, v) => name -> (RuntimeValue.Value(v): RuntimeValue[Type]) },
+    intrinsics.map { case (name, v) => name -> v },
     None
   )
 
