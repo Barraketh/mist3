@@ -1,20 +1,13 @@
 package com.mistlang.lang
 
-import com.mistlang.lang.RuntimeValue.Types._
-import com.mistlang.lang.RuntimeValue._
+import com.mistlang.lang.Types._
 import utest._
 
 object TyperTest extends TestSuite {
-  private val typerEnv = Env.make(
-    TyperIntrinsics.intrinsics.map { case (name, v) =>
-      name -> v
-    },
-    None
-  )
 
   def run(s: String): Type = {
     val e = FastparseParser.parse(s)
-    Typer.compile(e, typerEnv).body.lastOption.map(_.tpe).getOrElse(UnitType)
+    Typer.compile(e).body.lastOption.map(_.tpe).getOrElse(UnitType)
   }
 
   val tests = Tests {

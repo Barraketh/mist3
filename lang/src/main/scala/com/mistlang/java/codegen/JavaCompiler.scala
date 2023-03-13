@@ -1,8 +1,7 @@
 package com.mistlang.java.codegen
 
-import com.mistlang.lang.IR
-import com.mistlang.lang.RuntimeValue.Type
-import com.mistlang.lang.RuntimeValue.Types._
+import com.mistlang.lang.{IR, Type}
+import com.mistlang.lang.Types._
 
 object JavaCompiler {
   val unitInstance = JavaAst.Ident("Unit.unit")
@@ -44,11 +43,11 @@ object JavaCompiler {
   def compileExpr(expr: IR.Expr): JavaAst.Expr = expr match {
     case IR.Ident(name, _) =>
       val newName = name match {
-        case "+" => "plusOp"
-        case "-" => "minusOp"
-        case "*" => "productOp"
+        case "+"  => "plusOp"
+        case "-"  => "minusOp"
+        case "*"  => "productOp"
         case "==" => "eqIntOp"
-        case _ => name
+        case _    => name
       }
       JavaAst.Ident(newName)
     case IR.Call(expr, args, _)     => JavaAst.Call(compileExpr(expr), args.map(compileExpr))

@@ -1,7 +1,8 @@
 package com.mistlang.lang
 
-import com.mistlang.lang.RuntimeValue.Type
-import com.mistlang.lang.RuntimeValue.Types.{AnyType, FuncType, UnitType}
+import com.mistlang.interpreter.{Interpreter, InterpreterAst}
+import com.mistlang.lang.RuntimeValue.Value
+import com.mistlang.lang.Types._
 
 object TypeCheck {
 
@@ -14,7 +15,8 @@ object TypeCheck {
   }
 }
 object Typer {
-  type TypeEnv = Env[RuntimeValue]
+  type TypeEnv = Env[RuntimeValue[Type]]
+  val interpreter = new Interpreter[Type]
 
   def error(s: String) = throw TypeError(s)
 
@@ -22,7 +24,7 @@ object Typer {
 
     val argNames = d.args.map(_.name)
     val newEnv = argNames.zip(funcType.args).foldLeft(env.newScope) { case (curEnv, nextArg) =>
-      curEnv.put(nextArg._1, nextArg._2)
+      curEnv.put(nextArg._1, Value(nextArg._2))
     }
     val irBody = compileAll(d.body, newEnv)._1
     val outType = irBody.lastOption.map(_.tpe).getOrElse(UnitType)
@@ -38,10 +40,12 @@ object Typer {
 
   private def getFuncType(d: Ast.Def, env: TypeEnv): FuncType = {
     val argTypes = d.args.map { arg =>
-      Interpreter.evalExpr(env, arg.tpe) match { case t: Type => t }
+      interpreter.evalExpr(env, toInterpreterExpr(arg.tpe)) match {
+        case Value(t) => t
+      }
     }
-    val outType = Interpreter.evalExpr(env, d.outType) match {
-      case tpe: Type => tpe
+    val outType = interpreter.evalExpr(env, toInterpreterExpr(d.outType)) match {
+      case Value(tpe) => tpe
     }
     FuncType(argTypes, outType)
   }
@@ -68,10 +72,9 @@ object Typer {
         case b: Boolean => IR.BoolLiteral(b)
         case s: String  => IR.StrLiteral(s)
       }
-
     case Ast.Ident(name) =>
       val value = env.get(name).getOrElse(error(s"$name not found")) match {
-        case t: Type => t
+        case Value(t) => t
       }
       IR.Ident(name, value)
     case Ast.If(expr, success, fail) =>
@@ -82,27 +85,48 @@ object Typer {
     case c: Ast.Call => compileCall(c, env)
   }
 
-  private def compileStmt(stmt: Ast.BodyStmt, env: TypeEnv): (IR.BodyStmt, TypeEnv) = stmt match {
+  private def compileStmt(stmt: Ast.Stmt, env: TypeEnv): (IR.BodyStmt, TypeEnv) = stmt match {
     case expr: Ast.Expr => (compileExpr(expr, env), env)
     case Ast.Val(name, expr) =>
       val compiledExpr = compileExpr(expr, env)
-      (IR.Let(name, compiledExpr), env.put(name, compiledExpr.tpe))
+      (IR.Let(name, compiledExpr), env.put(name, Value(compiledExpr.tpe)))
   }
 
-  private def compileAll(stmts: List[Ast.BodyStmt], env: TypeEnv): (List[IR.BodyStmt], TypeEnv) = {
+  private def compileAll(stmts: List[Ast.Stmt], env: TypeEnv): (List[IR.BodyStmt], TypeEnv) = {
     stmts.foldLeft((Nil: List[IR.BodyStmt], env)) { case ((curStmts, curEnv), nextStmt) =>
       val compiled = compileStmt(nextStmt, curEnv)
       (curStmts :+ compiled._1, compiled._2)
     }
   }
 
-  def compile(program: Ast.Program, env: TypeEnv): IR.Program = {
+  def toInterpreterExpr(e: Ast.Expr): InterpreterAst.Expr[Type] = e match {
+    case Ast.Ident(name) => InterpreterAst.Ident(name)
+    case _               => error("Only type refs currently supported in type expressions")
+  }
+
+  private val intrinsics: Map[String, Type] = Map(
+    "+" -> FuncType(List(IntType, IntType), IntType),
+    "-" -> FuncType(List(IntType, IntType), IntType),
+    "*" -> FuncType(List(IntType, IntType), IntType),
+    "==" -> FuncType(List(AnyType, AnyType), BoolType),
+    "Unit" -> UnitType,
+    "Any" -> AnyType,
+    "Int" -> IntType,
+    "String" -> StrType
+  )
+
+  private val typerEnv = Env.make(
+    intrinsics.map { case (name, v) => name -> (RuntimeValue.Value(v): RuntimeValue[Type]) },
+    None
+  )
+
+  def compile(program: Ast.Program): IR.Program = {
     val tpes = program.defs.map { d =>
-      d.name -> getFuncType(d, env)
+      d.name -> getFuncType(d, typerEnv)
     }.toMap
 
-    val newEnv = program.defs.foldLeft(env) { case (curEnv, nextDef) =>
-      curEnv.put(nextDef.name, tpes(nextDef.name))
+    val newEnv = program.defs.foldLeft(typerEnv) { case (curEnv, nextDef) =>
+      curEnv.put(nextDef.name, Value(tpes(nextDef.name)))
     }
 
     val defs = program.defs.map(d => compileDef(d, tpes(d.name), newEnv))

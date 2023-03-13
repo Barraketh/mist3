@@ -1,35 +1,20 @@
 package com.mistlang.lang
 
-import com.mistlang.lang.RuntimeValue.IntVal
 import utest._
 
 object InterpreterTest extends TestSuite {
-  val parser = FastparseParser
+  private val parser = FastparseParser
 
-  val runtimeEnv = Env.make(
-    RuntimeIntrinsics.intrinsics.map { case (name, v) =>
-      name -> v
-    },
-    None
-  )
-
-  val typerEnv = Env.make(
-    TyperIntrinsics.intrinsics.map { case (name, v) =>
-      name -> v
-    },
-    None
-  )
-
-  def run(s: String): RuntimeValue = {
-    val e = parser.parse(s)
-    Interpreter.runAll(runtimeEnv, e)
+  def run(s: String): Any = {
+    val p = parser.parse(s)
+    MistInterpreter.run(p)
   }
 
   val tests = Tests {
     test("Test arithm") {
       val s = "3 * 2 + 3"
       val res = run(s)
-      assert(res == IntVal(9))
+      assert(res == 9)
     }
 
     test("Recursion") {
@@ -43,9 +28,8 @@ object InterpreterTest extends TestSuite {
 
           fib(6)
          """.stripMargin
-      } == IntVal(8))
+      } == 8)
     }
-
 
   }
 }

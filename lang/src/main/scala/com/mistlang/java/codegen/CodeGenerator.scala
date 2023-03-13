@@ -30,12 +30,12 @@ object CodeGenerator {
 
   def compileExpr(expr: Expr): String = {
     expr match {
-      case i: IntLiteral => i.i.toString
+      case i: IntLiteral  => i.i.toString
       case b: BoolLiteral => b.b.toString
-      case s: StrLiteral => "\"" + s.s + "\""
-      case i: Ident => i.name
-      case c: Call => compileCall(c)
-      case i: If => compileIf(i)
+      case s: StrLiteral  => "\"" + s.s + "\""
+      case i: Ident       => i.name
+      case c: Call        => compileCall(c)
+      case i: If          => compileIf(i)
     }
   }
 

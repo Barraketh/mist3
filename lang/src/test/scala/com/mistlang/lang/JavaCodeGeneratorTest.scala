@@ -12,16 +12,9 @@ object JavaCodeGeneratorTest extends TestSuite {
 
   val compiler = ToolProvider.getSystemJavaCompiler
 
-  private val typerEnv = Env.make(
-    TyperIntrinsics.intrinsics.map { case (name, v) =>
-      name -> v
-    },
-    None
-  )
-
   def run(s: String) = {
     val e = FastparseParser.parse(s)
-    val typed = Typer.compile(e, typerEnv)
+    val typed = Typer.compile(e)
     val c = gen.compile(JavaCompiler.compile(typed), Nil, "MyClass")
     println(c)
 
