@@ -51,16 +51,19 @@ object Grammar {
   def funcApply[_: P]: P[Trailer] =
     P("(" ~/ ("\n".rep ~ expr ~ "\n".rep).rep(0, ",") ~ ")").map(args => FuncApply(args.toList))
 
+  def memberRef[_: P]: P[Trailer] = P("." ~/ name).map(n => MemberRefTrailer(n))
+
   def infixCall[_: P]: P[Trailer] = P(symbol ~/ expr).map { case (s, e) =>
     InfixCall(s, e)
   }
 
-  def trailer[_: P]: P[Trailer] = P(funcApply | infixCall)
+  def trailer[_: P]: P[Trailer] = P(memberRef | funcApply | infixCall)
 
   def expr[_: P]: P[Expr] = P(term ~ trailer.rep).map { case (e, items) =>
     items.foldLeft(e)((curExpr, tralier) =>
       tralier match {
-        case FuncApply(args) => Call(curExpr, args)
+        case MemberRefTrailer(name) => Ast.MemberRef(curExpr, name)
+        case FuncApply(args)        => Call(curExpr, args)
         case InfixCall(op, arg) =>
           arg match {
             case Call(Ident(otherOp), otherArgs, true) if {
@@ -83,6 +86,8 @@ object Grammar {
       Def(n, args, outType, body)
     }
 
+  def struct[_: P] = P("struct" ~/ name ~ argDeclList).map { case (name, args) => Struct(name, args) }
+
   def argDecl[_: P] = P(name ~/ ":" ~ expr).map(ArgDecl.tupled)
 
   def argDeclList[_: P] = P("(" ~/ argDecl.rep(0, ",") ~ ")").map(_.toList)
@@ -93,11 +98,13 @@ object Grammar {
 
   def stmts[_: P] = P("\n".rep ~ stmt.rep(0, "\n".rep(1)) ~ "\n".rep).map(_.toList)
 
-  def program[_: P] = P("\n".rep ~ defP.rep(0, "\n".rep(1)) ~ stmts ~ End).map { case (d, s) =>
-    Program(d.toList, s)
+  def program[_: P] = P("\n".rep ~ struct.rep(0, "\n".rep(1)) ~ "\n".rep ~ defP.rep(0, "\n".rep(1)) ~ stmts ~ End).map {
+    case (structs, defs, stmts) =>
+      Program(structs.toList, defs.toList, stmts)
   }
 
   sealed trait Trailer
+  case class MemberRefTrailer(memberName: String) extends Trailer
   case class FuncApply(args: List[Expr]) extends Trailer
   case class InfixCall(name: String, arg: Expr) extends Trailer
 }
