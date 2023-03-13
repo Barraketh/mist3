@@ -7,6 +7,9 @@ object CodeGenerator {
   private def compileCall(c: Call): String =
     s"""${compileExpr(c.expr)}.apply(${c.args.map(compileExpr).mkString(", ")})"""
 
+  private def compileNew(n: New): String =
+    s"""(new ${n.tpe}(${n.args.map(compileExpr).mkString(", ")}))"""
+
   private def compileFunctionBody(stmts: List[Stmt]): String =
     stmts.map(compileStmt).mkString("\n")
 
@@ -28,6 +31,13 @@ object CodeGenerator {
        |""".stripMargin
   }
 
+  private def compileStruct(s: Struct): String = {
+    val compiledArgs = s.args.map(a => s"${a.tpe} ${a.name}").mkString(", ")
+    s"""
+       |public record ${s.name}($compiledArgs){}
+       |""".stripMargin
+  }
+
   def compileExpr(expr: Expr): String = {
     expr match {
       case i: IntLiteral  => i.i.toString
@@ -36,6 +46,8 @@ object CodeGenerator {
       case i: Ident       => i.name
       case c: Call        => compileCall(c)
       case i: If          => compileIf(i)
+      case m: MemberRef   => compileExpr(m.expr) + s".${m.memberName}"
+      case n: New         => compileNew(n)
     }
   }
 
@@ -57,6 +69,8 @@ object CodeGenerator {
        |import static com.mistlang.java.stdlib.StdFunctions.*;
        |
        |public class $className {
+       |  ${program.structs.map(compileStruct).mkString("\n")}
+       |  
        |  ${program.functions.map(compileFunc).mkString("\n")}
        |}""".stripMargin
   }

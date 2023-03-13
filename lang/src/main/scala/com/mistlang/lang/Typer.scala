@@ -1,7 +1,7 @@
 package com.mistlang.lang
 
-import com.mistlang.interpreter.{Env, Interpreter, InterpreterAst, RuntimeValue}
 import com.mistlang.interpreter.RuntimeValue.Value
+import com.mistlang.interpreter.{Env, Interpreter, InterpreterAst, RuntimeValue}
 import com.mistlang.lang.Types._
 
 object TypeCheck {
@@ -50,6 +50,25 @@ object Typer {
     FuncType(argTypes, outType)
   }
 
+  private def getStructType(s: Ast.Struct, env: TypeEnv): StructType = {
+    val args = s.args.map { arg =>
+      arg.name -> (interpreter.evalExpr(env, toInterpreterExpr(arg.tpe)) match {
+        case Value(t) => t
+      })
+    }
+    StructType(s.name, args)
+  }
+
+  private def compileMemberRef(m: Ast.MemberRef, env: TypeEnv): IR.MemberRef = {
+    val compiledExpr = compileExpr(m.expr, env)
+    compiledExpr.tpe match {
+      case s: StructType =>
+        val resType = s.args.find(_._1 == m.memberName).map(_._2).getOrElse(error(s"Member ${m.memberName} not found"))
+        IR.MemberRef(compiledExpr, m.memberName, resType)
+      case other => error(s"Cannot get member of ${other}")
+    }
+  }
+
   private def compileCall(c: Ast.Call, env: TypeEnv): IR.Expr = {
     val compiledFunc = compileExpr(c.func, env)
 
@@ -60,6 +79,12 @@ object Typer {
           TypeCheck.validateType(expectedType, arg.tpe, "")
         }
         IR.Call(compiledFunc, compiledArgs, f.out)
+      case s: StructType =>
+        val compiledArgs = c.args.map(a => compileExpr(a, env))
+        s.args.zip(compiledArgs).foreach { case (expectedArg, arg) =>
+          TypeCheck.validateType(expectedArg._2, arg.tpe, expectedArg._1)
+        }
+        IR.New(compiledArgs, s)
       case _ => error(s"Cannot call an object of type ${compiledFunc.tpe}")
     }
 
@@ -82,7 +107,8 @@ object Typer {
       val compiledSuccess = compileExpr(success, env)
       val compiledFail = compileExpr(fail, env)
       IR.If(resolvedExpr, compiledSuccess, compiledFail)
-    case c: Ast.Call => compileCall(c, env)
+    case c: Ast.Call      => compileCall(c, env)
+    case m: Ast.MemberRef => compileMemberRef(m, env)
   }
 
   private def compileStmt(stmt: Ast.Stmt, env: TypeEnv): (IR.BodyStmt, TypeEnv) = stmt match {
@@ -128,17 +154,29 @@ object Typer {
   )
 
   def compile(program: Ast.Program): IR.Program = {
-    val tpes = program.defs.map { d =>
-      d.name -> getFuncType(d, typerEnv)
-    }.toMap
-
-    val newEnv = program.defs.foldLeft(typerEnv) { case (curEnv, nextDef) =>
-      curEnv.put(nextDef.name, Value(tpes(nextDef.name)))
+    // TODO: implement lazyness so we can have forward sight?
+    val envWithStructs = program.structs.foldLeft(typerEnv) { case (curEnv, struct) =>
+      curEnv.put(struct.name, Value(getStructType(struct, curEnv)))
     }
 
-    val defs = program.defs.map(d => compileDef(d, tpes(d.name), newEnv))
+    val funcTypes = program.defs.map { d =>
+      d.name -> getFuncType(d, envWithStructs)
+    }.toMap
 
-    IR.Program(defs, compileAll(program.stmts, newEnv)._1)
+    val newEnv = program.defs.foldLeft(envWithStructs) { case (curEnv, nextDef) =>
+      curEnv.put(nextDef.name, Value(funcTypes(nextDef.name)))
+    }
+
+    val structs = program.structs
+      .map(s =>
+        newEnv.get(s.name) match {
+          case Some(Value(s: StructType)) => s
+        }
+      )
+      .map(s => IR.Struct(s))
+    val defs = program.defs.map(d => compileDef(d, funcTypes(d.name), newEnv))
+
+    IR.Program(structs, defs, compileAll(program.stmts, newEnv)._1)
   }
 }
 

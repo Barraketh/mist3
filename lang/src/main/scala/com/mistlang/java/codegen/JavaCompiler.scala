@@ -1,19 +1,20 @@
 package com.mistlang.java.codegen
 
-import com.mistlang.lang.{IR, Type}
 import com.mistlang.lang.Types._
+import com.mistlang.lang.{IR, Type}
 
 object JavaCompiler {
   val unitInstance = JavaAst.Ident("Unit.unit")
 
   private def compileType(tpe: Type): String = {
     tpe match {
-      case IntType     => "Integer"
-      case StrType     => "String"
-      case BoolType    => "Boolean"
-      case UnitType    => "Unit"
-      case AnyType     => "Object"
-      case f: FuncType => compileFunctionType(f)
+      case IntType             => "Integer"
+      case StrType             => "String"
+      case BoolType            => "Boolean"
+      case UnitType            => "Unit"
+      case AnyType             => "Object"
+      case StructType(name, _) => name
+      case f: FuncType         => compileFunctionType(f)
     }
   }
 
@@ -40,6 +41,10 @@ object JavaCompiler {
     )
   }
 
+  def compileStruct(s: IR.Struct): JavaAst.Struct = {
+    JavaAst.Struct(s.tpe.name, s.tpe.args.map(arg => JavaAst.Arg(arg._1, compileType(arg._2))))
+  }
+
   def compileExpr(expr: IR.Expr): JavaAst.Expr = expr match {
     case IR.Ident(name, _) =>
       val newName = name match {
@@ -50,11 +55,14 @@ object JavaCompiler {
         case _    => name
       }
       JavaAst.Ident(newName)
-    case IR.Call(expr, args, _)     => JavaAst.Call(compileExpr(expr), args.map(compileExpr))
-    case IR.If(expr, success, fail) => JavaAst.If(compileExpr(expr), compileExpr(success), compileExpr(fail))
-    case IR.IntLiteral(i)           => JavaAst.IntLiteral(i)
-    case IR.StrLiteral(s)           => JavaAst.StrLiteral(s)
-    case IR.BoolLiteral(b)          => JavaAst.BoolLiteral(b)
+    case IR.Call(expr, args, _)            => JavaAst.Call(compileExpr(expr), args.map(compileExpr))
+    case IR.If(expr, success, fail)        => JavaAst.If(compileExpr(expr), compileExpr(success), compileExpr(fail))
+    case IR.IntLiteral(i)                  => JavaAst.IntLiteral(i)
+    case IR.StrLiteral(s)                  => JavaAst.StrLiteral(s)
+    case IR.BoolLiteral(b)                 => JavaAst.BoolLiteral(b)
+    case IR.MemberRef(expr, memberName, _) => JavaAst.MemberRef(compileExpr(expr), memberName)
+    case IR.New(args, tpe)                 => JavaAst.New(compileType(tpe), args.map(compileExpr))
+
   }
 
   def compileStmt(stmt: IR.BodyStmt): JavaAst.Stmt = stmt match {
@@ -62,7 +70,8 @@ object JavaCompiler {
     case expr: IR.Expr      => compileExpr(expr)
   }
   def compile(p: IR.Program): JavaAst.Program = {
+    val structs = p.structs.map(compileStruct)
     val allDefs = p.defs ::: IR.Def("run", Nil, p.body.lastOption.map(_.tpe).getOrElse(UnitType), p.body) :: Nil
-    JavaAst.Program(allDefs.map(compileDef))
+    JavaAst.Program(structs, allDefs.map(compileDef))
   }
 }

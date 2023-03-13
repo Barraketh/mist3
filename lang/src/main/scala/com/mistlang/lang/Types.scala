@@ -14,4 +14,5 @@ object Types {
   case object UnitType extends Type
 
   case class FuncType(args: List[Type], out: Type) extends Type
+  case class StructType(name: String, args: List[(String, Type)]) extends Type
 }

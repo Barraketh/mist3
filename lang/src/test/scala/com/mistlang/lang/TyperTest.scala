@@ -91,4 +91,29 @@ class TyperTest extends AnyFlatSpec with should.Matchers {
     intercept[TypeError](run(code("f2")))
   }
 
+  "Structs" should "work correctly" in {
+    def code1(param: String) = {
+      s"""
+         |struct Foo(a: Int, b: $param)
+         |
+         |def f1(foo: Foo): String = foo.b
+         |""".stripMargin
+
+    }
+    run(code1("String"))
+    intercept[TypeError](run(code1("Int")))
+
+    def code2(param: String) = {
+      s"""
+         |struct Foo(a: Int, b: String)
+         |
+         |val foo = Foo(3, $param)
+         |foo.b
+         |""".stripMargin
+    }
+
+    TypeCheck.validateType(StrType, run(code2("\"bar\"")), "")
+    intercept[TypeError](run(code2("3")))
+  }
+
 }
