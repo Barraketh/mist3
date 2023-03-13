@@ -1,4 +1,4 @@
-package com.mistlang.lang
+package com.mistlang.interpreter
 
 sealed trait RuntimeValue[+A]
 object RuntimeValue {

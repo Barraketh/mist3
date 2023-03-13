@@ -1,4 +1,4 @@
-package com.mistlang.lang
+package com.mistlang.interpreter
 
 case class Env[T](map: Map[String, EnvValue[T]], parent: Option[Env[T]]) {
   def put(name: String, value: T): Env[T] = {

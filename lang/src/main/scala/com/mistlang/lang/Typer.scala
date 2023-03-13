@@ -1,7 +1,7 @@
 package com.mistlang.lang
 
-import com.mistlang.interpreter.{Interpreter, InterpreterAst}
-import com.mistlang.lang.RuntimeValue.Value
+import com.mistlang.interpreter.{Env, Interpreter, InterpreterAst, RuntimeValue}
+import com.mistlang.interpreter.RuntimeValue.Value
 import com.mistlang.lang.Types._
 
 object TypeCheck {

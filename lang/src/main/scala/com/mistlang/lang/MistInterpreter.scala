@@ -1,7 +1,7 @@
 package com.mistlang.lang
 
-import com.mistlang.interpreter.{Interpreter, InterpreterAst => IA}
-import com.mistlang.lang.RuntimeValue._
+import com.mistlang.interpreter.{Env, Interpreter, RuntimeValue, InterpreterAst => IA}
+import com.mistlang.interpreter.RuntimeValue._
 
 object MistInterpreter {
   private def compile(e: Ast.Expr): IA.Expr[Any] = e match {

@@ -1,7 +1,6 @@
 package com.mistlang.interpreter
 
-import com.mistlang.lang.RuntimeValue._
-import com.mistlang.lang.{Env, RuntimeValue}
+import RuntimeValue._
 
 object InterpreterAst {
   sealed trait Ast[+A]
