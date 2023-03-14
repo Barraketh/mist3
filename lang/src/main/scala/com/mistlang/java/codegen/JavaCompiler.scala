@@ -35,8 +35,8 @@ object JavaCompiler {
     JavaAst.Def(
       compileType(d.tpe),
       d.name,
-      d.args.map(a => JavaAst.Arg(a.name, compileType(a.tpe))),
-      compileType(d.outType),
+      d.args.zip(d.tpe.args).map { case (argName, argTpe) => JavaAst.Arg(argName, compileType(argTpe)) },
+      compileType(d.tpe.out),
       body
     )
   }
@@ -71,7 +71,11 @@ object JavaCompiler {
   }
   def compile(p: IR.Program): JavaAst.Program = {
     val structs = p.structs.map(compileStruct)
-    val allDefs = p.defs ::: IR.Def("run", Nil, p.body.lastOption.map(_.tpe).getOrElse(UnitType), p.body) :: Nil
+    val outType = p.body.lastOption match {
+      case Some(e: IR.Expr) => e.tpe
+      case _                => UnitType
+    }
+    val allDefs = p.defs ::: IR.Def("run", Nil, p.body, FuncType(Nil, outType)) :: Nil
     JavaAst.Program(structs, allDefs.map(compileDef))
   }
 }

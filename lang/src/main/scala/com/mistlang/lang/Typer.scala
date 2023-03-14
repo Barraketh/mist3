@@ -27,14 +27,17 @@ object Typer {
       curEnv.put(nextArg._1, Value(nextArg._2))
     }
     val irBody = compileAll(d.body, newEnv)._1
-    val outType = irBody.lastOption.map(_.tpe).getOrElse(UnitType)
+    val outType = irBody.lastOption match {
+      case Some(e: IR.Expr) => e.tpe
+      case _                => UnitType
+    }
     TypeCheck.validateType(funcType.out, outType, "out")
 
     IR.Def(
       d.name,
-      d.args.zip(funcType.args).map { case (arg, tpe) => IR.Arg(arg.name, tpe) },
-      funcType.out,
-      irBody
+      d.args.map(_.name),
+      irBody,
+      funcType
     )
   }
 
