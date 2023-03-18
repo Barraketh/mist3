@@ -10,14 +10,14 @@ object CodeGenerator {
   private def compileNew(n: New): String =
     s"""(new ${n.tpe}(${n.args.map(compileExpr).mkString(", ")}))"""
 
-  private def compileFunctionBody(stmts: List[Stmt]): String =
+  private def compileStmts(stmts: List[Stmt]): String =
     stmts.map(compileStmt).mkString("\n")
 
-  private def compileIf(i: If): String =
+  private def compileIf(i: IfExpr): String =
     s"""((${compileExpr(i.expr)}) ? ${compileExpr(i.success)} : ${compileExpr(i.fail)})"""
 
   private def compileFunc(func: Def): String = {
-    val body = compileFunctionBody(func.body)
+    val body = compileStmts(func.body)
     val compiledArgs = func.args.map(a => s"${a.tpe} ${a.name}").mkString(", ")
 
     s"""
@@ -45,7 +45,7 @@ object CodeGenerator {
       case s: StrLiteral  => "\"" + s.s + "\""
       case i: Ident       => i.name
       case c: Call        => compileCall(c)
-      case i: If          => compileIf(i)
+      case i: IfExpr      => compileIf(i)
       case m: MemberRef   => compileExpr(m.expr) + s".${m.memberName}"
       case n: New         => compileNew(n)
     }
@@ -53,6 +53,20 @@ object CodeGenerator {
 
   def compileStmt(ast: Stmt): String = ast match {
     case expr: Expr => compileExpr(expr) + ";"
+    case decl: Decl => s"final ${decl.tpe} ${decl.name};"
+    case ifStmt: IfStmt =>
+      s"""if (${compileExpr(ifStmt.cond)}) {
+         |  ${compileStmts(ifStmt.success)}
+         |} else {
+         |  ${compileStmts(ifStmt.fail)}
+         |}
+         |""".stripMargin
+    case s: Set => s"${s.name} = ${compileExpr(s.expr)};"
+    case b: Block =>
+      s"""{
+         |  ${compileStmts(b.stmts)}
+         |}
+         |""".stripMargin
     case l: Let =>
       val compiledExpr = compileExpr(l.expr)
       s"final ${l.tpe} ${l.name} = $compiledExpr;"

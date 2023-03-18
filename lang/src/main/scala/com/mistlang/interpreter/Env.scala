@@ -2,6 +2,8 @@ package com.mistlang.interpreter
 
 case class Env[T](map: Map[String, EnvValue[T]], parent: Option[Env[T]]) {
   def put(name: String, value: T): Env[T] = {
+    if (map.contains(name)) throw new RuntimeException(s"$name already defined")
+
     val toPut = EnvValue(value)
     Env(map + (name -> toPut), parent)
   }

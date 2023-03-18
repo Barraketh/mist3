@@ -11,7 +11,8 @@ object InterpreterAst {
   case class Literal[A](value: A) extends Expr[A]
   case class Ident(name: String) extends Expr[Nothing]
   case class Call[A](func: Expr[A], args: List[Expr[A]]) extends Expr[A]
-  case class Lambda[A](args: List[String], body: List[Stmt[A]]) extends Expr[A]
+  case class Lambda[A](args: List[String], body: Expr[A]) extends Expr[A]
+  case class Block[A](stmts: List[Stmt[A]]) extends Expr[A]
 
 }
 class Interpreter[A] {
@@ -22,6 +23,7 @@ class Interpreter[A] {
     expr match {
       case i: Ident       => env.get(i.name).getOrElse(throw new RuntimeException(s"${i.name} not found"))
       case Literal(value) => Value(value)
+      case b: Block[A]    => runAll(env.newScope, b.stmts)
       case c: Call[A] =>
         val f = evalExpr(env, c.func)
         f match {
@@ -39,7 +41,7 @@ class Interpreter[A] {
         curEnv.put(name, value)
       }
     }
-    runAll(newEnv.newScope, d.body)
+    evalExpr(newEnv.newScope, d.body)
   })
 
   def run(env: Env[RuntimeValue[A]], stmt: Ast[A]): (Env[RuntimeValue[A]], RuntimeValue[A]) = {

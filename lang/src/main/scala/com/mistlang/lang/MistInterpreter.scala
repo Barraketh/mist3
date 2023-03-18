@@ -11,10 +11,11 @@ object MistInterpreter {
     case Ast.If(expr, success, fail) =>
       IA.Call(
         IA.Ident("if"),
-        List(compile(expr), IA.Lambda(Nil, compile(success) :: Nil), IA.Lambda(Nil, compile(fail) :: Nil))
+        List(compile(expr), IA.Lambda(Nil, compile(success)), IA.Lambda(Nil, compile(fail)))
       )
     case Ast.MemberRef(expr, memberName) =>
       IA.Call(IA.Ident("getMember"), List(compile(expr), IA.Literal(memberName)))
+    case Ast.Block(stmts) => IA.Block(stmts.map(compileStmt))
   }
 
   private def compileStmt(s: Ast.Stmt): IA.Stmt[Any] = s match {
@@ -29,11 +30,11 @@ object MistInterpreter {
         struct.name,
         IA.Lambda(
           struct.args.map(_.name),
-          IA.Call(IA.Ident("Object"), struct.args.flatMap(arg => List(IA.Literal(arg.name), IA.Ident(arg.name)))) :: Nil
+          IA.Call(IA.Ident("Object"), struct.args.flatMap(arg => List(IA.Literal(arg.name), IA.Ident(arg.name))))
         )
       )
     )
-    val defs = p.defs.map(d => IA.Set(d.name, IA.Lambda(d.args.map(_.name), d.body.map(compileStmt))))
+    val defs = p.defs.map(d => IA.Set(d.name, IA.Lambda(d.args.map(_.name), compile(d.body))))
     val body = p.stmts.map(compileStmt)
     nameExprs ::: structs ::: defs ::: body
   }

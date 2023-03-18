@@ -8,10 +8,7 @@ class TyperTest extends AnyFlatSpec with should.Matchers {
 
   def run(s: String): Type = {
     val e = FastparseParser.parse(s)
-    Typer.compile(e).body.lastOption match {
-      case Some(e: IR.Expr) => e.tpe
-      case _                => UnitType
-    }
+    Typer.compile(e).body.tpe
   }
 
   "Intrinsic params" should "work correctly" in {

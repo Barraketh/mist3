@@ -2,6 +2,7 @@ package com.mistlang.lang
 
 import com.mistlang.interpreter.RuntimeValue.Value
 import com.mistlang.interpreter.{Env, Interpreter, InterpreterAst, RuntimeValue}
+import com.mistlang.lang.Ast.Block
 import com.mistlang.lang.Types._
 
 object TypeCheck {
@@ -26,12 +27,8 @@ object Typer {
     val newEnv = argNames.zip(funcType.args).foldLeft(env.newScope) { case (curEnv, nextArg) =>
       curEnv.put(nextArg._1, Value(nextArg._2))
     }
-    val irBody = compileAll(d.body, newEnv)._1
-    val outType = irBody.lastOption match {
-      case Some(e: IR.Expr) => e.tpe
-      case _                => UnitType
-    }
-    TypeCheck.validateType(funcType.out, outType, "out")
+    val irBody = compileExpr(d.body, newEnv)
+    TypeCheck.validateType(funcType.out, irBody.tpe, "out")
 
     IR.Def(
       d.name,
@@ -112,17 +109,18 @@ object Typer {
       IR.If(resolvedExpr, compiledSuccess, compiledFail)
     case c: Ast.Call      => compileCall(c, env)
     case m: Ast.MemberRef => compileMemberRef(m, env)
+    case b: Ast.Block     => IR.Block(compileAll(b.stmts, env.newScope)._1)
   }
 
-  private def compileStmt(stmt: Ast.Stmt, env: TypeEnv): (IR.BodyStmt, TypeEnv) = stmt match {
+  private def compileStmt(stmt: Ast.Stmt, env: TypeEnv): (IR.Stmt, TypeEnv) = stmt match {
     case expr: Ast.Expr => (compileExpr(expr, env), env)
     case Ast.Val(name, expr) =>
       val compiledExpr = compileExpr(expr, env)
       (IR.Let(name, compiledExpr), env.put(name, Value(compiledExpr.tpe)))
   }
 
-  private def compileAll(stmts: List[Ast.Stmt], env: TypeEnv): (List[IR.BodyStmt], TypeEnv) = {
-    stmts.foldLeft((Nil: List[IR.BodyStmt], env)) { case ((curStmts, curEnv), nextStmt) =>
+  private def compileAll(stmts: List[Ast.Stmt], env: TypeEnv): (List[IR.Stmt], TypeEnv) = {
+    stmts.foldLeft((Nil: List[IR.Stmt], env)) { case ((curStmts, curEnv), nextStmt) =>
       val compiled = compileStmt(nextStmt, curEnv)
       (curStmts :+ compiled._1, compiled._2)
     }
@@ -178,8 +176,12 @@ object Typer {
       )
       .map(s => IR.Struct(s))
     val defs = program.defs.map(d => compileDef(d, funcTypes(d.name), newEnv))
+    val body = program.stmts match {
+      case (b: Block) :: Nil => b
+      case _                 => Block(program.stmts)
+    }
 
-    IR.Program(structs, defs, compileAll(program.stmts, newEnv)._1)
+    IR.Program(structs, defs, compileExpr(body, newEnv))
   }
 }
 
