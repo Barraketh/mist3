@@ -95,7 +95,9 @@ object Grammar {
 
   def stmts[_: P] = P("\n".rep ~ stmt.rep(0, "\n".rep(1)) ~ "\n".rep).map(_.toList)
 
-  def topLevelStmt[_: P] = struct | defP
+  def namespace[_: P] = (P("namespace") ~/ name ~ "{" ~ topLevelStmts ~ "}").map(Namespace.tupled)
+
+  def topLevelStmt[_: P] = namespace | struct | defP
 
   def topLevelStmts[_: P]: P[List[TopLevelStmt]] =
     P("\n".rep ~ topLevelStmt.rep(0, "\n".rep(1)) ~ "\n".rep).map(_.toList)

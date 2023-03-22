@@ -9,6 +9,7 @@ object Ast {
   case class ArgDecl(name: String, tpe: Expr)
   case class Def(name: String, args: List[ArgDecl], outType: Expr, body: Expr) extends TopLevelStmt
   case class Struct(name: String, args: List[ArgDecl]) extends TopLevelStmt
+  case class Namespace(name: String, children: List[TopLevelStmt]) extends TopLevelStmt
 
   sealed trait Stmt
   case class Val(name: String, expr: Expr) extends Stmt

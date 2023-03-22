@@ -27,8 +27,19 @@ object MistInterpreter {
           args.map(_.name),
           IA.Call(IA.Ident("Object"), args.flatMap(arg => List(IA.Literal(arg.name), IA.Ident(arg.name))))
         )
+      case n: Ast.Namespace =>
+        val stmts = compileTopLevel(n.children)
+        val returnStmt =
+          IA.Call(IA.Ident("Object"), n.children.flatMap(s => List(IA.Literal(s.name), IA.Ident(s.name))))
+        IA.Block(stmts :+ returnStmt)
     }
     IA.Set(s.name, res)
+  }
+
+  private def compileTopLevel(stmts: List[TopLevelStmt]): List[IA.Stmt[Any]] = {
+    val nameExprs = stmts.map(s => IA.Let(s.name, IA.Literal(null)))
+    val topLevelStmts = stmts.map(compileTopLevel)
+    nameExprs ::: topLevelStmts
   }
 
   private def compileStmt(s: Ast.Stmt): IA.Stmt[Any] = s match {
@@ -36,11 +47,9 @@ object MistInterpreter {
     case expr: Ast.Expr      => compile(expr)
   }
   def compile(p: Ast.Program): List[IA.Ast[Any]] = {
-    val topLevelNames = p.topLevelStmts.map(_.name) //p.structs.map(_.name) ::: p.defs.map(_.name)
-    val nameExprs = topLevelNames.map(name => IA.Let(name, IA.Literal(null)))
-    val topLevelStmts = p.topLevelStmts.map(compileTopLevel)
+    val topLevel = compileTopLevel(p.topLevelStmts)
     val body = p.stmts.map(compileStmt)
-    nameExprs ::: topLevelStmts ::: body
+    topLevel ::: body
   }
 
   val intrinsics: Map[String, RuntimeValue[Any]] = Map(
