@@ -22,8 +22,6 @@ object CodeGenerator {
 
     s"""
        |public static final ${func.funcType} ${func.name} = new ${func.funcType}() {
-       |  private final ${func.funcType} ${func.name} = this;
-       |
        |  public ${func.outType} apply($compiledArgs) {
        |    $body
        |  }

@@ -22,7 +22,7 @@ class Interpreter[A] {
   def evalExpr(env: Env[RuntimeValue[A]], expr: Expr[A]): RuntimeValue[A] = {
     expr match {
       case i: Ident       => env.get(i.name).getOrElse(throw new RuntimeException(s"${i.name} not found"))
-      case Literal(value) => Value(value)
+      case Literal(value) => Strict(value)
       case b: Block[A]    => runAll(env.newScope, b.stmts)
       case c: Call[A] =>
         val f = evalExpr(env, c.func)

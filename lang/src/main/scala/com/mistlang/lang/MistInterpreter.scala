@@ -44,26 +44,26 @@ object MistInterpreter {
   }
 
   val intrinsics: Map[String, RuntimeValue[Any]] = Map(
-    "+" -> Func[Any] { case Value(a: Int) :: Value(b: Int) :: Nil => Value(a + b) },
-    "-" -> Func[Any] { case Value(a: Int) :: Value(b: Int) :: Nil => Value(a - b) },
-    "*" -> Func[Any] { case Value(a: Int) :: Value(b: Int) :: Nil => Value(a * b) },
-    "==" -> Func[Any] { case Value(a) :: Value(b) :: Nil => Value(a == b) },
+    "+" -> Func[Any] { case (a: Value[Int]) :: (b: Value[Int]) :: Nil => Strict(a.value + b.value) },
+    "-" -> Func[Any] { case (a: Value[Int]) :: (b: Value[Int]) :: Nil => Strict(a.value - b.value) },
+    "*" -> Func[Any] { case (a: Value[Int]) :: (b: Value[Int]) :: Nil => Strict(a.value * b.value) },
+    "==" -> Func[Any] { case (a: Value[Any]) :: (b: Value[Any]) :: Nil => Strict(a.value == b.value) },
     "Unit" -> UnitVal,
-    "if" -> Func[Any] { case Value(cond: Boolean) :: (success: Func[Any]) :: (failure: Func[Any]) :: Nil =>
-      if (cond) success.f(Nil) else failure.f(Nil)
+    "if" -> Func[Any] { case (cond: Value[Boolean]) :: (success: Func[Any]) :: (failure: Func[Any]) :: Nil =>
+      if (cond.value) success.f(Nil) else failure.f(Nil)
     },
     "Object" -> Func[Any] { args =>
       val obj = args
         .grouped(2)
-        .map { case Value(key: String) :: value :: Nil =>
-          key -> value
+        .map { case (key: Value[String]) :: value :: Nil =>
+          key.value -> value
         }
         .toMap
 
-      Value(obj)
+      Strict(obj)
     },
-    "getMember" -> Func[Any] { case Value(map: Map[String, RuntimeValue[Any]]) :: Value(key: String) :: Nil =>
-      map(key)
+    "getMember" -> Func[Any] { case (map: Value[Map[String, RuntimeValue[Any]]]) :: (key: Value[String]) :: Nil =>
+      map.value(key.value)
     }
   )
 
@@ -76,7 +76,7 @@ object MistInterpreter {
 
   def run(p: Ast.Program): Any = {
     interpreter.runAll(runtimeEnv, compile(p)) match {
-      case Value(a) => a
+      case a: Value[Any] => a.value
     }
   }
 

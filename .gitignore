@@ -8,3 +8,4 @@ target
 .metals
 .bloop
 test
+metals.sbt
