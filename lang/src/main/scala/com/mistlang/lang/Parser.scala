@@ -95,10 +95,12 @@ object Grammar {
 
   def stmts[_: P] = P("\n".rep ~ stmt.rep(0, "\n".rep(1)) ~ "\n".rep).map(_.toList)
 
-  def program[_: P] = P("\n".rep ~ struct.rep(0, "\n".rep(1)) ~ "\n".rep ~ defP.rep(0, "\n".rep(1)) ~ stmts ~ End).map {
-    case (structs, defs, stmts) =>
-      Program(structs.toList, defs.toList, stmts)
-  }
+  def topLevelStmt[_: P] = struct | defP
+
+  def topLevelStmts[_: P]: P[List[TopLevelStmt]] =
+    P("\n".rep ~ topLevelStmt.rep(0, "\n".rep(1)) ~ "\n".rep).map(_.toList)
+
+  def program[_: P]: P[Program] = P(topLevelStmts ~ stmts ~ End).map(Program.tupled)
 
   sealed trait Trailer
   case class MemberRefTrailer(memberName: String) extends Trailer

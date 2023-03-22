@@ -21,7 +21,10 @@ object Typer {
 
   def error(s: String) = throw TypeError(s)
 
-  private def compileDef(d: Ast.Def, funcType: FuncType, env: TypeEnv): IR.Def = {
+  private def compileDef(d: Ast.Def, env: TypeEnv): IR.Def = {
+    val funcType = env.get(d.name) match {
+      case Some(Value(f: FuncType)) => f
+    }
 
     val argNames = d.args.map(_.name)
     val newEnv = argNames.zip(funcType.args).foldLeft(env.newScope) { case (curEnv, nextArg) =>
@@ -155,27 +158,26 @@ object Typer {
   )
 
   def compile(program: Ast.Program): IR.Program = {
-    // TODO: implement lazyness so we can have forward sight?
-    val envWithStructs = program.structs.foldLeft(typerEnv) { case (curEnv, struct) =>
-      curEnv.put(struct.name, Value(getStructType(struct, curEnv)))
+    val newEnv = program.topLevelStmts.foldLeft(typerEnv) { case (curEnv, stmt) =>
+      val res = stmt match {
+        case d: Ast.Def    => getFuncType(d, curEnv)
+        case s: Ast.Struct => getStructType(s, curEnv)
+      }
+      curEnv.put(stmt.name, Value(res))
     }
 
-    val funcTypes = program.defs.map { d =>
-      d.name -> getFuncType(d, envWithStructs)
-    }.toMap
-
-    val newEnv = program.defs.foldLeft(envWithStructs) { case (curEnv, nextDef) =>
-      curEnv.put(nextDef.name, Value(funcTypes(nextDef.name)))
-    }
-
-    val structs = program.structs
-      .map(s =>
+    val structs = program.topLevelStmts
+      .collect { case s: Ast.Struct =>
         newEnv.get(s.name) match {
           case Some(Value(s: StructType)) => s
         }
-      )
+      }
       .map(s => IR.Struct(s))
-    val defs = program.defs.map(d => compileDef(d, funcTypes(d.name), newEnv))
+
+    val defs = program.topLevelStmts.collect { case d: Ast.Def =>
+      compileDef(d, newEnv)
+    }
+
     val body = program.stmts match {
       case (b: Block) :: Nil => b
       case _                 => Block(program.stmts)

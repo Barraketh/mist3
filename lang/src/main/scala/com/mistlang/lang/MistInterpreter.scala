@@ -2,6 +2,7 @@ package com.mistlang.lang
 
 import com.mistlang.interpreter.RuntimeValue._
 import com.mistlang.interpreter.{Env, Interpreter, RuntimeValue, InterpreterAst => IA}
+import com.mistlang.lang.Ast.TopLevelStmt
 
 object MistInterpreter {
   private def compile(e: Ast.Expr): IA.Expr[Any] = e match {
@@ -18,25 +19,28 @@ object MistInterpreter {
     case Ast.Block(stmts) => IA.Block(stmts.map(compileStmt))
   }
 
+  private def compileTopLevel(s: TopLevelStmt): IA.Stmt[Any] = {
+    val res = s match {
+      case Ast.Def(_, args, _, body) => IA.Lambda(args.map(_.name), compile(body))
+      case Ast.Struct(_, args) =>
+        IA.Lambda(
+          args.map(_.name),
+          IA.Call(IA.Ident("Object"), args.flatMap(arg => List(IA.Literal(arg.name), IA.Ident(arg.name))))
+        )
+    }
+    IA.Set(s.name, res)
+  }
+
   private def compileStmt(s: Ast.Stmt): IA.Stmt[Any] = s match {
     case Ast.Val(name, expr) => IA.Let(name, compile(expr))
     case expr: Ast.Expr      => compile(expr)
   }
   def compile(p: Ast.Program): List[IA.Ast[Any]] = {
-    val topLevelNames = p.structs.map(_.name) ::: p.defs.map(_.name)
+    val topLevelNames = p.topLevelStmts.map(_.name) //p.structs.map(_.name) ::: p.defs.map(_.name)
     val nameExprs = topLevelNames.map(name => IA.Let(name, IA.Literal(null)))
-    val structs = p.structs.map(struct =>
-      IA.Set(
-        struct.name,
-        IA.Lambda(
-          struct.args.map(_.name),
-          IA.Call(IA.Ident("Object"), struct.args.flatMap(arg => List(IA.Literal(arg.name), IA.Ident(arg.name))))
-        )
-      )
-    )
-    val defs = p.defs.map(d => IA.Set(d.name, IA.Lambda(d.args.map(_.name), compile(d.body))))
+    val topLevelStmts = p.topLevelStmts.map(compileTopLevel)
     val body = p.stmts.map(compileStmt)
-    nameExprs ::: structs ::: defs ::: body
+    nameExprs ::: topLevelStmts ::: body
   }
 
   val intrinsics: Map[String, RuntimeValue[Any]] = Map(

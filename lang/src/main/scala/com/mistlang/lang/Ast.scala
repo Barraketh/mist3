@@ -1,13 +1,16 @@
 package com.mistlang.lang
 
-sealed trait Ast
 object Ast {
-  case class Program(structs: List[Struct], defs: List[Def], stmts: List[Stmt])
-  case class ArgDecl(name: String, tpe: Expr)
-  case class Def(name: String, args: List[ArgDecl], outType: Expr, body: Expr) extends Ast
-  case class Struct(name: String, args: List[ArgDecl]) extends Ast
+  case class Program(topLevelStmts: List[TopLevelStmt], stmts: List[Stmt])
 
-  sealed trait Stmt extends Ast
+  sealed trait TopLevelStmt {
+    def name: String
+  }
+  case class ArgDecl(name: String, tpe: Expr)
+  case class Def(name: String, args: List[ArgDecl], outType: Expr, body: Expr) extends TopLevelStmt
+  case class Struct(name: String, args: List[ArgDecl]) extends TopLevelStmt
+
+  sealed trait Stmt
   case class Val(name: String, expr: Expr) extends Stmt
 
   sealed trait Expr extends Stmt
