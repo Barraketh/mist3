@@ -84,7 +84,7 @@ object MistInterpreter {
   val interpreter = new Interpreter[Any]
 
   def run(p: Ast.Program): Any = {
-    interpreter.runAll(runtimeEnv, compile(p)) match {
+    interpreter.runAll(runtimeEnv, compile(p))._2 match {
       case a: Value[Any] => a.value
     }
   }

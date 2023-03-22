@@ -13,6 +13,7 @@ object InterpreterAst {
   case class Call[A](func: Expr[A], args: List[Expr[A]]) extends Expr[A]
   case class Lambda[A](args: List[String], body: Expr[A]) extends Expr[A]
   case class Block[A](stmts: List[Stmt[A]]) extends Expr[A]
+  case class Lazy[A](expr: Expr[A]) extends Expr[A]
 
 }
 class Interpreter[A] {
@@ -23,7 +24,7 @@ class Interpreter[A] {
     expr match {
       case i: Ident       => env.get(i.name).getOrElse(throw new RuntimeException(s"${i.name} not found"))
       case Literal(value) => Strict(value)
-      case b: Block[A]    => runAll(env.newScope, b.stmts)
+      case b: Block[A]    => runAll(env.newScope, b.stmts)._2
       case c: Call[A] =>
         val f = evalExpr(env, c.func)
         f match {
@@ -32,6 +33,12 @@ class Interpreter[A] {
             f.f(resolvedArgs)
         }
       case l: Lambda[A] => buildFunc(l, env)
+      case l: Lazy[A] =>
+        RuntimeValue.Lazy(() =>
+          evalExpr(env, l.expr) match {
+            case v: Value[A] => v.value
+          }
+        )
     }
   }
 
@@ -57,12 +64,11 @@ class Interpreter[A] {
     }
   }
 
-  def runAll(env: Env[RuntimeValue[A]], stmts: List[Ast[A]]): RuntimeValue[A] = {
+  def runAll(env: Env[RuntimeValue[A]], stmts: List[Ast[A]]): (Env[RuntimeValue[A]], RuntimeValue[A]) = {
     stmts
       .foldLeft((env, UnitVal: RuntimeValue[A])) { case ((curEnv, _), nextStmt) =>
         run(curEnv, nextStmt)
       }
-      ._2
   }
 
 }

@@ -1,7 +1,7 @@
 package com.mistlang.lang
 
-import com.mistlang.interpreter.RuntimeValue.{Lazy, Strict, Value}
-import com.mistlang.interpreter.{Env, Interpreter, InterpreterAst, RuntimeValue}
+import com.mistlang.interpreter.RuntimeValue.{Strict, Value}
+import com.mistlang.interpreter.{Env, Interpreter, RuntimeValue, InterpreterAst => IA}
 import com.mistlang.lang.Ast.Block
 import com.mistlang.lang.Types._
 
@@ -16,8 +16,8 @@ object TypeCheck {
   }
 }
 object Typer {
-  type TypeEnv = Env[RuntimeValue[Type]]
-  val interpreter = new Interpreter[Type]
+  type TypeEnv = Env[RuntimeValue[Any]]
+  val interpreter = new Interpreter[Any]
 
   def error(s: String) = throw TypeError(s)
 
@@ -41,25 +41,13 @@ object Typer {
     )
   }
 
-  private def getFuncType(d: Ast.Def, env: TypeEnv): FuncType = {
-    val argTypes = d.args.map { arg =>
-      interpreter.evalExpr(env, toInterpreterExpr(arg.tpe)) match {
-        case t: Value[Type] => t.value
-      }
-    }
-    val outType = interpreter.evalExpr(env, toInterpreterExpr(d.outType)) match {
-      case tpe: Value[Type] => tpe.value
-    }
-    FuncType(argTypes, outType)
-  }
-
-  private def getStructType(s: Ast.Struct, env: TypeEnv): StructType = {
-    val args = s.args.map { arg =>
-      arg.name -> (interpreter.evalExpr(env, toInterpreterExpr(arg.tpe)) match {
-        case t: Value[Type] => t.value
-      })
-    }
-    StructType(s.name, args)
+  def compileTopLevel(e: Ast.TopLevelStmt): IA.Expr[Any] = e match {
+    case d: Ast.Def => IA.Call(IA.Ident("Func"), (d.args.map(_.tpe) ::: d.outType :: Nil).map(toInterpreterExpr))
+    case s: Ast.Struct =>
+      IA.Call(
+        IA.Ident("Struct"),
+        IA.Literal(s.name) :: s.args.flatMap(arg => List(IA.Literal(arg.name), toInterpreterExpr(arg.tpe)))
+      )
   }
 
   private def compileMemberRef(m: Ast.MemberRef, env: TypeEnv): IR.MemberRef = {
@@ -129,13 +117,19 @@ object Typer {
     }
   }
 
-  def toInterpreterExpr(e: Ast.Expr): InterpreterAst.Expr[Type] = e match {
-    case Ast.Ident(name) => InterpreterAst.Ident(name)
-    case c: Ast.Call     => InterpreterAst.Call(toInterpreterExpr(c.func), c.args.map(toInterpreterExpr))
+  def toInterpreterExpr(e: Ast.Expr): IA.Expr[Type] = e match {
+    case Ast.Ident(name) => IA.Ident(name)
+    case c: Ast.Call     => IA.Call(toInterpreterExpr(c.func), c.args.map(toInterpreterExpr))
     case _               => error("Only type refs currently supported in type expressions")
   }
 
-  private val intrinsics: Map[String, RuntimeValue[Type]] = Map(
+  def compileTopLevel(stmts: List[Ast.TopLevelStmt]): List[IA.Stmt[Any]] = {
+    val namestmts = stmts.map(s => IA.Let(s.name, IA.Literal(null)))
+    val topLevelStmts = stmts.map(s => IA.Set(s.name, IA.Lazy(compileTopLevel(s))))
+    namestmts ::: topLevelStmts
+  }
+
+  private val intrinsics: Map[String, RuntimeValue[Any]] = Map(
     "+" -> Strict(FuncType(List(IntType, IntType), IntType)),
     "-" -> Strict(FuncType(List(IntType, IntType), IntType)),
     "*" -> Strict(FuncType(List(IntType, IntType), IntType)),
@@ -147,26 +141,26 @@ object Typer {
     "Func" -> RuntimeValue.Func[Type](args => {
       val tpes = args.collect { case t: Value[Type] => t.value }
       RuntimeValue.Strict(FuncType(tpes.take(tpes.length - 1), tpes.last))
-    })
+    }),
+    "Struct" -> RuntimeValue.Func[Any] { case (name: Value[String]) :: args =>
+      val obj = args
+        .grouped(2)
+        .map { case (key: Value[String]) :: (tpe: Value[Type]) :: Nil =>
+          key.value -> tpe.value
+        }
+        .toList
+      RuntimeValue.Strict(StructType(name.value, obj))
+    }
   )
 
-  private val typerEnv = Env.make(
+  private val typerEnv = Env.make[RuntimeValue[Any]](
     intrinsics.map { case (name, v) => name -> v },
     None
   )
 
   def compile(program: Ast.Program): IR.Program = {
-    val newEnv = program.topLevelStmts.foldLeft(typerEnv) { case (curEnv, stmt) =>
-      curEnv.put(stmt.name, Strict(null))
-    }
-
-    program.topLevelStmts.foreach { stmt =>
-      val res = stmt match {
-        case d: Ast.Def    => () => getFuncType(d, newEnv)
-        case s: Ast.Struct => () => getStructType(s, newEnv)
-      }
-      newEnv.set(stmt.name, Lazy(res))
-    }
+    val topLevelStmts = compileTopLevel(program.topLevelStmts)
+    val newEnv = interpreter.runAll(typerEnv, topLevelStmts)._1
 
     val structs = program.topLevelStmts
       .collect { case s: Ast.Struct =>
