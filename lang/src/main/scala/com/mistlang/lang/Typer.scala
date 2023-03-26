@@ -41,13 +41,25 @@ object Typer {
     )
   }
 
-  def compileTopLevel(e: Ast.TopLevelStmt): IA.Expr[Any] = e match {
+  def toInterpreterStmt(e: Ast.TopLevelStmt, path: String): IA.Expr[Any] = e match {
     case d: Ast.Def => IA.Call(IA.Ident("Func"), (d.args.map(_.tpe) ::: d.outType :: Nil).map(toInterpreterExpr))
     case s: Ast.Struct =>
       IA.Call(
-        IA.Ident("Struct"),
-        IA.Literal(s.name) :: s.args.flatMap(arg => List(IA.Literal(arg.name), toInterpreterExpr(arg.tpe)))
+        IA.Ident("StructType"),
+        IA.Literal(s.name) :: IA.Literal(path) :: s.args.flatMap(arg =>
+          List(IA.Literal(arg.name), toInterpreterExpr(arg.tpe))
+        )
       )
+    case n: Ast.Namespace =>
+      val newPath = if (path.isEmpty) n.name else s"$path.${n.name}"
+      val stmts = toInterpreterStmts(n.children, newPath)
+      IA.Block(
+        stmts ::: IA.Call(
+          IA.Ident("NamespaceType"),
+          n.children.flatMap(c => IA.Literal(c.name) :: IA.Ident(c.name) :: Nil)
+        ) :: Nil
+      )
+
   }
 
   private def compileMemberRef(m: Ast.MemberRef, env: TypeEnv): IR.MemberRef = {
@@ -55,6 +67,9 @@ object Typer {
     compiledExpr.tpe match {
       case s: StructType =>
         val resType = s.args.find(_._1 == m.memberName).map(_._2).getOrElse(error(s"Member ${m.memberName} not found"))
+        IR.MemberRef(compiledExpr, m.memberName, resType)
+      case n: NamespaceType =>
+        val resType = n.children(m.memberName)
         IR.MemberRef(compiledExpr, m.memberName, resType)
       case other => error(s"Cannot get member of ${other}")
     }
@@ -117,15 +132,16 @@ object Typer {
     }
   }
 
-  def toInterpreterExpr(e: Ast.Expr): IA.Expr[Type] = e match {
-    case Ast.Ident(name) => IA.Ident(name)
-    case c: Ast.Call     => IA.Call(toInterpreterExpr(c.func), c.args.map(toInterpreterExpr))
-    case _               => error("Only type refs currently supported in type expressions")
+  def toInterpreterExpr(e: Ast.Expr): IA.Expr[Any] = e match {
+    case Ast.Ident(name)  => IA.Ident(name)
+    case c: Ast.Call      => IA.Call(toInterpreterExpr(c.func), c.args.map(toInterpreterExpr))
+    case m: Ast.MemberRef => IA.Call(IA.Ident("getMember"), List(toInterpreterExpr(m.expr), IA.Literal(m.memberName)))
+    case other            => error(s"$other unsupported in type expressions")
   }
 
-  def compileTopLevel(stmts: List[Ast.TopLevelStmt]): List[IA.Stmt[Any]] = {
+  def toInterpreterStmts(stmts: List[Ast.TopLevelStmt], path: String): List[IA.Stmt[Any]] = {
     val namestmts = stmts.map(s => IA.Let(s.name, IA.Literal(null)))
-    val topLevelStmts = stmts.map(s => IA.Set(s.name, IA.Lazy(compileTopLevel(s))))
+    val topLevelStmts = stmts.map(s => IA.Set(s.name, IA.Lazy(toInterpreterStmt(s, path))))
     namestmts ::: topLevelStmts
   }
 
@@ -142,16 +158,48 @@ object Typer {
       val tpes = args.collect { case t: Value[Type] => t.value }
       RuntimeValue.Strict(FuncType(tpes.take(tpes.length - 1), tpes.last))
     }),
-    "Struct" -> RuntimeValue.Func[Any] { case (name: Value[String]) :: args =>
+    "StructType" -> RuntimeValue.Func[Any] { case (name: Value[String]) :: (namespace: Value[String]) :: args =>
       val obj = args
         .grouped(2)
         .map { case (key: Value[String]) :: (tpe: Value[Type]) :: Nil =>
           key.value -> tpe.value
         }
         .toList
-      RuntimeValue.Strict(StructType(name.value, obj))
+      RuntimeValue.Strict(StructType(name.value, namespace.value, obj))
+    },
+    "NamespaceType" -> RuntimeValue.Func[Any] { args =>
+      val map = args
+        .grouped(2)
+        .map { case (key: Value[String]) :: (value: Value[Type]) :: Nil =>
+          key.value -> value.value
+        }
+        .toMap
+
+      Strict(NamespaceType(map))
+    },
+    "getMember" -> RuntimeValue.Func[Any] { case (n: Value[NamespaceType]) :: (key: Value[String]) :: Nil =>
+      RuntimeValue.Strict(n.value.children(key.value))
     }
   )
+
+  def compileTopLevel(stmts: List[Ast.TopLevelStmt], env: TypeEnv): List[IR.TopLevelStmt] = {
+    stmts.map {
+      case s: Ast.Struct =>
+        val tpe = env.get(s.name) match {
+          case Some(s: Value[StructType]) => s.value
+        }
+        IR.Struct(tpe)
+      case d: Ast.Def => compileDef(d, env)
+      case n: Ast.Namespace =>
+        val namespaceTpe = env.get(n.name) match {
+          case Some(nt: Value[NamespaceType]) => nt.value
+        }
+        val nextEnv = namespaceTpe.children.foldLeft(env.newScope) { case (curEnv, (name, tpe)) =>
+          curEnv.put(name, Strict(tpe))
+        }
+        IR.Namespace(n.name, compileTopLevel(n.children, nextEnv))
+    }
+  }
 
   private val typerEnv = Env.make[RuntimeValue[Any]](
     intrinsics.map { case (name, v) => name -> v },
@@ -159,17 +207,9 @@ object Typer {
   )
 
   def compile(program: Ast.Program): IR.Program = {
-    val topLevelStmts = compileTopLevel(program.topLevelStmts)
-    val newEnv = interpreter.runAll(typerEnv, topLevelStmts)._1
-
-    val irTopLevel = program.topLevelStmts.map {
-      case s: Ast.Struct =>
-        val tpe = newEnv.get(s.name) match {
-          case Some(s: Value[StructType]) => s.value
-        }
-        IR.Struct(tpe)
-      case d: Ast.Def => compileDef(d, newEnv)
-    }
+    val topLevelStmts = toInterpreterStmts(program.topLevelStmts, "")
+    val newEnv = interpreter.runAll(typerEnv.newScope, topLevelStmts)._1
+    val irTopLevel = compileTopLevel(program.topLevelStmts, newEnv)
 
     val body = program.stmts match {
       case (b: Block) :: Nil => b

@@ -56,13 +56,13 @@ object JavaCompiler {
 
   private def compileType(tpe: Type): String = {
     tpe match {
-      case IntType             => "Integer"
-      case StrType             => "String"
-      case BoolType            => "Boolean"
-      case UnitType            => "Unit"
-      case AnyType             => "Object"
-      case StructType(name, _) => name
-      case f: FuncType         => compileFunctionType(f)
+      case IntType                   => "Integer"
+      case StrType                   => "String"
+      case BoolType                  => "Boolean"
+      case UnitType                  => "Unit"
+      case AnyType                   => "Object"
+      case StructType(name, path, _) => if (path.isEmpty) name else s"$path.$name"
+      case f: FuncType               => compileFunctionType(f)
     }
   }
 
@@ -183,12 +183,14 @@ object JavaCompiler {
 
   }
 
+  private def compileTopLevel(stmt: IR.TopLevelStmt): JavaAst.TopLevelStmt = stmt match {
+    case s: IR.Struct    => compileStruct(s)
+    case d: IR.Def       => compileDef(d)
+    case n: IR.Namespace => JavaAst.Namespace(n.name, n.stmts.map(compileTopLevel))
+  }
+
   def compile(p: IR.Program): JavaAst.Program = {
     val allStmts: List[IR.TopLevelStmt] = p.stmts ::: IR.Def("run", Nil, p.body, FuncType(Nil, p.body.tpe)) :: Nil
-    val compiledStmts = allStmts.map {
-      case s: IR.Struct => compileStruct(s)
-      case d: IR.Def    => compileDef(d)
-    }
-    JavaAst.Program(compiledStmts)
+    JavaAst.Program(allStmts.map(compileTopLevel))
   }
 }

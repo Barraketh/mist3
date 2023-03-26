@@ -7,7 +7,7 @@ object IR {
   sealed trait TopLevelStmt
   case class Def(name: String, args: List[String], body: Expr, tpe: FuncType) extends TopLevelStmt
   case class Struct(tpe: StructType) extends TopLevelStmt
-  case class Namespace(stmts: List[TopLevelStmt]) extends TopLevelStmt
+  case class Namespace(name: String, stmts: List[TopLevelStmt]) extends TopLevelStmt
   sealed trait Stmt
   case class Let(name: String, expr: Expr) extends Stmt
   sealed trait Expr extends Stmt {
