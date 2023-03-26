@@ -162,16 +162,13 @@ object Typer {
     val topLevelStmts = compileTopLevel(program.topLevelStmts)
     val newEnv = interpreter.runAll(typerEnv, topLevelStmts)._1
 
-    val structs = program.topLevelStmts
-      .collect { case s: Ast.Struct =>
-        newEnv.get(s.name) match {
+    val irTopLevel = program.topLevelStmts.map {
+      case s: Ast.Struct =>
+        val tpe = newEnv.get(s.name) match {
           case Some(s: Value[StructType]) => s.value
         }
-      }
-      .map(s => IR.Struct(s))
-
-    val defs = program.topLevelStmts.collect { case d: Ast.Def =>
-      compileDef(d, newEnv)
+        IR.Struct(tpe)
+      case d: Ast.Def => compileDef(d, newEnv)
     }
 
     val body = program.stmts match {
@@ -179,7 +176,7 @@ object Typer {
       case _                 => Block(program.stmts)
     }
 
-    IR.Program(structs, defs, compileExpr(body, newEnv))
+    IR.Program(irTopLevel, compileExpr(body, newEnv))
   }
 }
 

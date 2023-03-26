@@ -3,9 +3,11 @@ package com.mistlang.lang
 import com.mistlang.lang.Types._
 
 object IR {
-  case class Program(structs: List[Struct], defs: List[Def], body: Expr)
-  case class Def(name: String, args: List[String], body: Expr, tpe: FuncType)
-  case class Struct(tpe: StructType)
+  case class Program(stmts: List[TopLevelStmt], body: Expr)
+  sealed trait TopLevelStmt
+  case class Def(name: String, args: List[String], body: Expr, tpe: FuncType) extends TopLevelStmt
+  case class Struct(tpe: StructType) extends TopLevelStmt
+  case class Namespace(stmts: List[TopLevelStmt]) extends TopLevelStmt
   sealed trait Stmt
   case class Let(name: String, expr: Expr) extends Stmt
   sealed trait Expr extends Stmt {

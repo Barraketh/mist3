@@ -1,10 +1,12 @@
 package com.mistlang.java.codegen
 
 object JavaAst {
-  case class Program(structs: List[Struct], functions: List[Def])
+  case class Program(stmts: List[TopLevelStmt])
+  sealed trait TopLevelStmt
   case class Arg(name: String, tpe: String)
   case class Def(funcType: String, name: String, args: List[Arg], outType: String, body: List[Stmt])
-  case class Struct(name: String, args: List[Arg])
+    extends TopLevelStmt
+  case class Struct(name: String, args: List[Arg]) extends TopLevelStmt
 
   sealed trait Stmt
   case class Let(name: String, tpe: String, expr: Expr) extends Stmt

@@ -72,6 +72,12 @@ object CodeGenerator {
   }
 
   def compile(program: Program, pkg: List[String], className: String): String = {
+    val classBody = program.stmts
+      .map {
+        case s: JavaAst.Struct => compileStruct(s)
+        case d: JavaAst.Def    => compileFunc(d)
+      }
+      .mkString("\n")
 
     val pkgStmt = if (pkg.nonEmpty) s"package ${pkg.mkString(".")};\n" else ""
     s"""$pkgStmt
@@ -81,9 +87,7 @@ object CodeGenerator {
        |import static com.mistlang.java.stdlib.StdFunctions.*;
        |
        |public class $className {
-       |  ${program.structs.map(compileStruct).mkString("\n")}
-       |  
-       |  ${program.functions.map(compileFunc).mkString("\n")}
+       |  $classBody
        |}""".stripMargin
   }
 

@@ -184,8 +184,11 @@ object JavaCompiler {
   }
 
   def compile(p: IR.Program): JavaAst.Program = {
-    val structs = p.structs.map(compileStruct)
-    val allDefs = p.defs ::: IR.Def("run", Nil, p.body, FuncType(Nil, p.body.tpe)) :: Nil
-    JavaAst.Program(structs, allDefs.map(compileDef))
+    val allStmts: List[IR.TopLevelStmt] = p.stmts ::: IR.Def("run", Nil, p.body, FuncType(Nil, p.body.tpe)) :: Nil
+    val compiledStmts = allStmts.map {
+      case s: IR.Struct => compileStruct(s)
+      case d: IR.Def    => compileDef(d)
+    }
+    JavaAst.Program(compiledStmts)
   }
 }
