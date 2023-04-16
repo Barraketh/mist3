@@ -1,72 +1,78 @@
 package com.mistlang.interpreter
 
-import RuntimeValue._
+import com.mistlang.interpreter.RuntimeValue._
 
 object InterpreterAst {
-  sealed trait Ast[+A]
-  sealed trait Stmt[+A] extends Ast[A]
-  case class Let[A](name: String, expr: Expr[A]) extends Stmt[A]
-  case class Set[A](name: String, expr: Expr[A]) extends Stmt[A]
-  sealed trait Expr[+A] extends Stmt[A]
-  case class Literal[A](value: A) extends Expr[A]
-  case class Ident(name: String) extends Expr[Nothing]
-  case class Call[A](func: Expr[A], args: List[Expr[A]]) extends Expr[A]
-  case class Lambda[A](args: List[String], body: Expr[A]) extends Expr[A]
-  case class Block[A](stmts: List[Stmt[A]]) extends Expr[A]
-  case class Lazy[A](expr: Expr[A]) extends Expr[A]
+  sealed trait Ast
+  sealed trait Stmt extends Ast
+  sealed trait EnvOp extends Stmt {
+    def name: String
+    def expr: Expr
+    def isLazy: Boolean
+  }
+  case class Let(name: String, expr: Expr, isLazy: Boolean) extends EnvOp
+  case class Set(name: String, expr: Expr, isLazy: Boolean) extends EnvOp
+  sealed trait Expr extends Stmt
+  case class Literal(value: Any) extends Expr
+  case class Ident(name: String) extends Expr
+  case class Call(func: Expr, args: List[Expr]) extends Expr
+  case class Lambda(args: List[String], body: Expr) extends Expr
+  case class Block(stmts: List[Stmt]) extends Expr
 
 }
-class Interpreter[A] {
+class Interpreter {
 
   import InterpreterAst._
 
-  def evalExpr(env: Env[RuntimeValue[A]], expr: Expr[A]): RuntimeValue[A] = {
+  def evalExpr(env: Env[RuntimeValue], expr: Expr): Any = {
     expr match {
-      case i: Ident       => env.get(i.name).getOrElse(throw new RuntimeException(s"${i.name} not found"))
-      case Literal(value) => Strict(value)
-      case b: Block[A]    => runAll(env.newScope, b.stmts)._2
-      case c: Call[A] =>
+      case i: Ident       => env.get(i.name).getOrElse(throw new RuntimeException(s"${i.name} not found")).value
+      case Literal(value) => value
+      case b: Block       => runAll(env.newScope, b.stmts)._2
+      case c: Call =>
         val f = evalExpr(env, c.func)
         f match {
-          case f: Func[A] =>
+          case f: Function[List[Any], Any] =>
             val resolvedArgs = c.args.map(evalExpr(env, _))
-            f.f(resolvedArgs)
+            f(resolvedArgs)
         }
-      case l: Lambda[A] => buildFunc(l, env)
-      case l: Lazy[A] =>
-        RuntimeValue.Lazy(() =>
-          evalExpr(env, l.expr) match {
-            case v: Value[A] => v.value
-          }
-        )
+      case l: Lambda => buildFunc(l, env)
     }
   }
 
-  private def buildFunc(d: Lambda[A], env: Env[RuntimeValue[A]]): Func[A] = Func((args: List[RuntimeValue[A]]) => {
+  private def buildFunc(d: Lambda, env: Env[RuntimeValue]): Function[List[Any], Any] = (args: List[Any]) => {
     val newEnv = {
       d.args.zip(args).foldLeft(env.newScope) { case (curEnv, (name, value)) =>
-        curEnv.put(name, value)
+        curEnv.put(name, Strict(value))
       }
     }
     evalExpr(newEnv.newScope, d.body)
-  })
+  }
 
-  def run(env: Env[RuntimeValue[A]], stmt: Ast[A]): (Env[RuntimeValue[A]], RuntimeValue[A]) = {
+  def run(env: Env[RuntimeValue], stmt: Ast): (Env[RuntimeValue], Any) = {
     stmt match {
-      case e: Expr[A] => (env, evalExpr(env, e))
-      case l: Let[A] =>
-        val evaluated = evalExpr(env, l.expr)
-        (env.put(l.name, evaluated), UnitVal)
-      case s: Set[A] =>
-        val evaluated = evalExpr(env, s.expr)
-        env.set(s.name, evaluated)
-        (env, UnitVal)
+      case e: Expr => (env, evalExpr(env, e))
+      case e: EnvOp =>
+        val f: (String, RuntimeValue) => Env[RuntimeValue] = e match {
+          case _: Let => env.put
+          case _: Set =>
+            (name, value) =>
+              env.set(name, value)
+              env
+        }
+        val nextEnv = if (!e.isLazy) {
+          val evaluated = evalExpr(env, e.expr)
+          f(e.name, Strict(evaluated))
+        } else {
+          f(e.name, Lazy(() => evalExpr(env, e.expr)))
+        }
+        (nextEnv, UnitVal)
     }
   }
 
-  def runAll(env: Env[RuntimeValue[A]], stmts: List[Ast[A]]): (Env[RuntimeValue[A]], RuntimeValue[A]) = {
+  def runAll(env: Env[RuntimeValue], stmts: List[Ast]): (Env[RuntimeValue], Any) = {
     stmts
-      .foldLeft((env, UnitVal: RuntimeValue[A])) { case ((curEnv, _), nextStmt) =>
+      .foldLeft((env, UnitVal: Any)) { case ((curEnv, _), nextStmt) =>
         run(curEnv, nextStmt)
       }
   }

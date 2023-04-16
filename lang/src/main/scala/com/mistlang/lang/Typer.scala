@@ -1,6 +1,6 @@
 package com.mistlang.lang
 
-import com.mistlang.interpreter.RuntimeValue.{Strict, Value}
+import com.mistlang.interpreter.RuntimeValue.Strict
 import com.mistlang.interpreter.{Env, Interpreter, RuntimeValue, InterpreterAst => IA}
 import com.mistlang.lang.Ast.Block
 import com.mistlang.lang.Types._
@@ -16,14 +16,14 @@ object TypeCheck {
   }
 }
 object Typer {
-  type TypeEnv = Env[RuntimeValue[Any]]
-  val interpreter = new Interpreter[Any]
+  type TypeEnv = Env[RuntimeValue]
+  val interpreter = new Interpreter
 
   def error(s: String) = throw TypeError(s)
 
   private def compileDef(d: Ast.Def, env: TypeEnv): IR.Def = {
     val funcType = env.get(d.name) match {
-      case Some(f: Value[FuncType]) => f.value
+      case Some(f) => f.value.asInstanceOf[FuncType]
     }
 
     val argNames = d.args.map(_.name)
@@ -41,7 +41,7 @@ object Typer {
     )
   }
 
-  def toInterpreterStmt(e: Ast.TopLevelStmt, path: String): IA.Expr[Any] = e match {
+  def toInterpreterStmt(e: Ast.TopLevelStmt, path: String): IA.Expr = e match {
     case d: Ast.Def => IA.Call(IA.Ident("Func"), (d.args.map(_.tpe) ::: d.outType :: Nil).map(toInterpreterExpr))
     case s: Ast.Struct =>
       IA.Call(
@@ -104,8 +104,8 @@ object Typer {
         case s: String  => IR.StrLiteral(s)
       }
     case Ast.Ident(name) =>
-      val value = env.get(name).getOrElse(error(s"$name not found")) match {
-        case t: Value[Type] => t.value
+      val value = env.get(name).getOrElse(error(s"$name not found")).value match {
+        case t: Type => t
       }
       IR.Ident(name, value)
     case Ast.If(expr, success, fail) =>
@@ -132,53 +132,53 @@ object Typer {
     }
   }
 
-  def toInterpreterExpr(e: Ast.Expr): IA.Expr[Any] = e match {
+  def toInterpreterExpr(e: Ast.Expr): IA.Expr = e match {
     case Ast.Ident(name)  => IA.Ident(name)
     case c: Ast.Call      => IA.Call(toInterpreterExpr(c.func), c.args.map(toInterpreterExpr))
     case m: Ast.MemberRef => IA.Call(IA.Ident("getMember"), List(toInterpreterExpr(m.expr), IA.Literal(m.memberName)))
     case other            => error(s"$other unsupported in type expressions")
   }
 
-  def toInterpreterStmts(stmts: List[Ast.TopLevelStmt], path: String): List[IA.Stmt[Any]] = {
-    val namestmts = stmts.map(s => IA.Let(s.name, IA.Literal(null)))
-    val topLevelStmts = stmts.map(s => IA.Set(s.name, IA.Lazy(toInterpreterStmt(s, path))))
+  def toInterpreterStmts(stmts: List[Ast.TopLevelStmt], path: String): List[IA.Stmt] = {
+    val namestmts = stmts.map(s => IA.Let(s.name, IA.Literal(null), isLazy = false))
+    val topLevelStmts = stmts.map(s => IA.Set(s.name, toInterpreterStmt(s, path), isLazy = true))
     namestmts ::: topLevelStmts
   }
 
-  private val intrinsics: Map[String, RuntimeValue[Any]] = Map(
-    "+" -> Strict(FuncType(List(IntType, IntType), IntType)),
-    "-" -> Strict(FuncType(List(IntType, IntType), IntType)),
-    "*" -> Strict(FuncType(List(IntType, IntType), IntType)),
-    "==" -> Strict(FuncType(List(AnyType, AnyType), BoolType)),
-    "Unit" -> Strict(UnitType),
-    "Any" -> Strict(AnyType),
-    "Int" -> Strict(IntType),
-    "String" -> Strict(StrType),
-    "Func" -> RuntimeValue.Func[Type](args => {
-      val tpes = args.collect { case t: Value[Type] => t.value }
-      RuntimeValue.Strict(FuncType(tpes.take(tpes.length - 1), tpes.last))
+  private val intrinsics: Map[String, Any] = Map(
+    "+" -> (FuncType(List(IntType, IntType), IntType)),
+    "-" -> (FuncType(List(IntType, IntType), IntType)),
+    "*" -> (FuncType(List(IntType, IntType), IntType)),
+    "==" -> (FuncType(List(AnyType, AnyType), BoolType)),
+    "Unit" -> (UnitType),
+    "Any" -> (AnyType),
+    "Int" -> (IntType),
+    "String" -> (StrType),
+    "Func" -> ((args: List[Any]) => {
+      val tpes = args.collect { case t: Type => t }
+      FuncType(tpes.take(tpes.length - 1), tpes.last)
     }),
-    "StructType" -> RuntimeValue.Func[Any] { case (name: Value[String]) :: (namespace: Value[String]) :: args =>
+    "StructType" -> RuntimeValue.Func({ case (name: String) :: (namespace: String) :: args =>
       val obj = args
         .grouped(2)
-        .map { case (key: Value[String]) :: (tpe: Value[Type]) :: Nil =>
-          key.value -> tpe.value
+        .map { case (key: String) :: (tpe: Type) :: Nil =>
+          key -> tpe
         }
         .toList
-      RuntimeValue.Strict(StructType(name.value, namespace.value, obj))
-    },
-    "NamespaceType" -> RuntimeValue.Func[Any] { args =>
+      StructType(name, namespace, obj)
+    }),
+    "NamespaceType" -> { (args: List[Any]) =>
       val map = args
         .grouped(2)
-        .map { case (key: Value[String]) :: (value: Value[Type]) :: Nil =>
-          key.value -> value.value
+        .map { case (key: String) :: (value: Type) :: Nil =>
+          key -> value
         }
         .toMap
 
-      Strict(NamespaceType(map))
+      (NamespaceType(map))
     },
-    "getMember" -> RuntimeValue.Func[Any] { case (n: Value[NamespaceType]) :: (key: Value[String]) :: Nil =>
-      RuntimeValue.Strict(n.value.children(key.value))
+    "getMember" -> RuntimeValue.Func { case (n: NamespaceType) :: (key: String) :: Nil =>
+      n.children(key)
     }
   )
 
@@ -186,13 +186,13 @@ object Typer {
     stmts.map {
       case s: Ast.Struct =>
         val tpe = env.get(s.name) match {
-          case Some(s: Value[StructType]) => s.value
+          case Some(s) => s.value.asInstanceOf[StructType]
         }
         IR.Struct(tpe)
       case d: Ast.Def => compileDef(d, env)
       case n: Ast.Namespace =>
         val namespaceTpe = env.get(n.name) match {
-          case Some(nt: Value[NamespaceType]) => nt.value
+          case Some(nt) => nt.value.asInstanceOf[NamespaceType]
         }
         val nextEnv = namespaceTpe.children.foldLeft(env.newScope) { case (curEnv, (name, tpe)) =>
           curEnv.put(name, Strict(tpe))
@@ -201,8 +201,8 @@ object Typer {
     }
   }
 
-  private val typerEnv = Env.make[RuntimeValue[Any]](
-    intrinsics.map { case (name, v) => name -> v },
+  private val typerEnv = Env.make[RuntimeValue](
+    intrinsics.map { case (name, v) => name -> (Strict(v): RuntimeValue) },
     None
   )
 
