@@ -107,18 +107,6 @@ object Typer {
           val key = nameObj.stringTag("value")
           TypeObject(s.args.find(_._1 == key).getOrElse(error(s"key ${key} not found in struct $s"))._2)
       }
-//      "StructType" -> TypeConstructor { case (nameObj: TypeObject) :: (namespaceObj: TypeObject) :: args =>
-//        val name = nameObj.stringTag("value")
-//        val namespace = namespaceObj.stringTag("value")
-//
-//        val obj = args
-//          .grouped(2)
-//          .map { case (keyObj: TypeObject) :: (tpe: TypeObject) :: Nil =>
-//            keyObj.stringTag("value") -> tpe.tpe
-//          }
-//          .toList
-//        TypeObject(StructType(name, namespace, obj))
-//      }
     ).map { case (key, value) =>
       key -> TypeObject(value)
     }

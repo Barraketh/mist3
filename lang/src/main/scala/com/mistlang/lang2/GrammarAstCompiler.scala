@@ -73,7 +73,7 @@ object GrammarAstCompiler {
             )
           Ast.Block(nextId(), stmts :+ returnStmt)
       }
-      Ast.Set(s.name, res, isLazy = false)
+      Ast.Set(s.name, res, isLazy = true)
     }
 
     def compileTopLevel(stmts: List[G.TopLevelStmt]): List[Ast.Stmt] = {
