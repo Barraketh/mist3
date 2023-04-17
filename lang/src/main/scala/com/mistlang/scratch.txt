@@ -1,0 +1,17 @@
+val f1 = fn (Int => Int) $0 + 3
+
+val f2 = fn (Int, Int => Int) $0 + $1
+
+val f = inline {
+  comptime (
+    if (length($args) == 2) runtime(f1($0))
+    else {
+      if (length($args) == 3) runtime(f2($0, $1))
+      else error("Unexepected number of params: " + length($args))
+    }
+  )
+}
+
+val polymorphic = inline {
+
+}

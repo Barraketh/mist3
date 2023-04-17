@@ -1,6 +1,7 @@
 package com.mistlang.lang
 
 import com.mistlang.lang.Types._
+import com.mistlang.lang2.{GrammarAstCompiler, Typer}
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers._
 
@@ -8,7 +9,7 @@ class TyperTest extends AnyFlatSpec with should.Matchers {
 
   def run(s: String): Type = {
     val e = FastparseParser.parse(s)
-    Typer.compile(e).body.tpe
+    Typer.typeStmts(GrammarAstCompiler.compile(e)).tpe
   }
 
   "Intrinsic params" should "work correctly" in {
