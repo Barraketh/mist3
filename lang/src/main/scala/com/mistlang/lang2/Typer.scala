@@ -77,7 +77,14 @@ object Typer {
       val newEnv = l.args.zip(inputTypes).foldLeft(env.newScope) { case (curEnv, nextArg) =>
         curEnv.put(nextArg._1.name, Strict(nextArg._2))
       }
-      val actualOut = evalExpr(l.body, newEnv)
+
+      val withRec = (l.name, expectedOut) match {
+        case (Some(name), Some(value)) =>
+          newEnv.put(name, Strict(TypeObject(FuncType(inputTypes.map(_.tpe), value.tpe))))
+        case _ => newEnv
+      }
+
+      val actualOut = evalExpr(l.body, withRec)
       expectedOut.foreach { o =>
         checkType(o.tpe, actualOut.tpe)
       }

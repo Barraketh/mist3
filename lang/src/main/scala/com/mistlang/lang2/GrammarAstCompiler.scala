@@ -21,8 +21,8 @@ object GrammarAstCompiler {
           Ast.Ident(nextId(), "if"),
           List(
             compile(expr),
-            Ast.Lambda(nextId(), Nil, None, compile(success)),
-            Ast.Lambda(nextId(), Nil, None, compile(fail))
+            Ast.Lambda(nextId(), Nil, None, compile(success), None),
+            Ast.Lambda(nextId(), Nil, None, compile(fail), None)
           )
         )
       case G.MemberRef(expr, memberName) =>
@@ -34,14 +34,15 @@ object GrammarAstCompiler {
 
     def compileTopLevelStmt(s: G.TopLevelStmt): Ast.Stmt = {
       val res = s match {
-        case G.Def(_, args, outType, body) =>
+        case G.Def(name, args, outType, body) =>
           Ast.Lambda(
             nextId(),
             args.map(compileArg),
             Some(compile(outType)),
-            compile(body)
+            compile(body),
+            Some(name)
           )
-        case G.Struct(_, args) =>
+        case G.Struct(name, args) =>
           val compiledArgs = args.map(compileArg)
           Ast.As(
             nextId(),
@@ -53,7 +54,8 @@ object GrammarAstCompiler {
                 nextId(),
                 Ast.Ident(nextId(), "Object"),
                 args.flatMap(arg => List(Ast.Literal(nextId(), arg.name), Ast.Ident(nextId(), arg.name)))
-              )
+              ),
+              Some(name)
             ),
             Ast.Call(
               nextId(),

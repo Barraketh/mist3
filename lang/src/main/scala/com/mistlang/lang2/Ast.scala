@@ -16,7 +16,7 @@ object Ast {
   case class Ident(id: Int, name: String) extends Expr
   case class Call(id: Int, func: Expr, args: List[Expr]) extends Expr
   case class ArgDecl(name: String, tpe: Expr)
-  case class Lambda(id: Int, args: List[ArgDecl], outType: Option[Expr], body: Expr) extends Expr
+  case class Lambda(id: Int, args: List[ArgDecl], outType: Option[Expr], body: Expr, name: Option[String]) extends Expr
   case class Block(id: Int, stmts: List[Stmt]) extends Expr
   case class As(id: Int, expr: Expr, tpeExpr: Expr) extends Expr
 
