@@ -16,6 +16,7 @@ object Interpreter {
         case f: Function[List[Any], Any] =>
           val resolvedArgs = c.args.map(evalExpr(_, env))
           f(resolvedArgs)
+        case other => throw new RuntimeException(s"Cannot call ${other}")
       }
     }
     override def lambda(l: Lambda, env: Env[RuntimeValue]): Any = { (args: List[Any]) =>

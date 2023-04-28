@@ -29,8 +29,9 @@ object Typer {
     val map: TypeCache = collection.mutable.Map.empty
     override def unit: TypeObject = TypeObject(UnitType)
     override def asT(a: Any): TypeObject = a match {
-      case t: TypeObject => t
-      case other         => error(s"$other is not a type")
+      case t: TypeObject               => t
+      case f: Function[List[Any], Any] => TypeObject(TypeConstructor(l => f(l).asInstanceOf[TypeObject]))
+      case other                       => error(s"$other is not a type")
     }
     override def literal(l: Literal): TypeObject = {
       val tpe = l.value match {
@@ -108,11 +109,6 @@ object Typer {
       "String" -> (StrType),
       "if" -> TypeConstructor.make { case BoolType :: FuncType(_, succ) :: FuncType(_, fail) :: Nil =>
         if (succ == fail) succ else AnyType
-      },
-      "getMember" -> TypeConstructor {
-        case (TypeObject(s: StructType, _)) :: (nameObj @ TypeObject(StrType, _)) :: Nil =>
-          val key = nameObj.stringTag("value")
-          TypeObject(s.args.find(_._1 == key).getOrElse(error(s"key ${key} not found in struct $s"))._2)
       }
     ).map { case (key, value) =>
       key -> TypeObject(value)
@@ -128,20 +124,30 @@ object Typer {
           .toList
         TypeObject(StructType(name, "", obj))
       }),
+      "Object" -> RuntimeValue.Func({ case args: List[TypeObject] =>
+        val obj = args
+          .grouped(2)
+          .map { case (nameObj @ TypeObject(StrType, _)) :: value :: Nil =>
+            val key = nameObj.stringTag("value")
+            key -> value.tpe
+          }
+          .toList
+        TypeObject(StructType("", "", obj))
+      }),
+      "getMember" -> RuntimeValue.Func({
+        case TypeObject(s: StructType, _) :: keyArg :: Nil =>
+          val key = keyArg match {
+            case s: String => s
+            case keyObj @ TypeObject(StrType, _) =>
+              keyObj.stringTag("value")
+          }
+          TypeObject(s.args.find(_._1 == key).getOrElse(error(s"key ${key} not found in struct $s"))._2)
+        case other => error(s"Wrong type for $other")
+      }),
       "Func" -> ((args: List[Any]) => {
         val tpes = args.collect { case t: TypeObject => t.tpe }
         TypeObject(FuncType(tpes.take(tpes.length - 1), tpes.last))
-      }),
-      "NamespaceType" -> { (args: List[Any]) =>
-        val map = args
-          .grouped(2)
-          .map { case (key: String) :: (value: Type) :: Nil =>
-            key -> value
-          }
-          .toMap
-
-        (NamespaceType(map))
-      }
+      })
     )
 
     val intrinsics = basicTypes ++ typeConstructors
