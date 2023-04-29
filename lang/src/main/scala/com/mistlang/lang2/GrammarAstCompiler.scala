@@ -81,7 +81,8 @@ object GrammarAstCompiler {
     def compileTopLevel(stmts: List[G.TopLevelStmt]): List[Ast.Stmt] = {
       val nameExprs = stmts.map(s => Ast.Let(s.name, Ast.Literal(nextId(), null), isLazy = false))
       val topLevelStmts = stmts.map(compileTopLevelStmt)
-      nameExprs ::: topLevelStmts
+      val topLevelExprs = stmts.map(s => Ast.Ident(nextId(), s.name)) ::: Ast.Ident(nextId(), "Unit") :: Nil
+      nameExprs ::: topLevelStmts ::: topLevelExprs
     }
 
     def compileStmt(s: G.Stmt): Ast.Stmt = s match {
