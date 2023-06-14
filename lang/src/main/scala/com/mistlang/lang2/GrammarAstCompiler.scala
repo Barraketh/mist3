@@ -12,12 +12,12 @@ object GrammarAstCompiler {
     }
 
     def compile(e: G.Expr): Ast.Expr = e match {
-      case G.Literal(value)      => Ast.Literal(nextId(), value)
-      case G.Ident(name)         => Ast.Ident(nextId(), name)
-      case G.Call(func, args, _) => Ast.Call(nextId(), compile(func), args.map(compile))
-      case G.If(expr, success, fail) =>
+      case G.Literal(id, value)      => Ast.Literal(id, value)
+      case G.Ident(id, name)         => Ast.Ident(id, name)
+      case G.Call(id, func, args, _) => Ast.Call(id, compile(func), args.map(compile))
+      case G.If(id, expr, success, fail) =>
         Ast.Call(
-          nextId(),
+          id,
           Ast.Ident(nextId(), "if"),
           List(
             compile(expr),
@@ -25,9 +25,9 @@ object GrammarAstCompiler {
             Ast.Lambda(nextId(), Nil, None, compile(fail), None)
           )
         )
-      case G.MemberRef(expr, memberName) =>
-        Ast.Call(nextId(), Ast.Ident(nextId(), "getMember"), List(compile(expr), Ast.Literal(nextId(), memberName)))
-      case G.Block(stmts) => Ast.Block(nextId(), stmts.map(compileStmt))
+      case G.MemberRef(id, expr, memberName) =>
+        Ast.Call(id, Ast.Ident(nextId(), "getMember"), List(compile(expr), Ast.Literal(nextId(), memberName)))
+      case G.Block(id, stmts) => Ast.Block(id, stmts.map(compileStmt))
     }
 
     def compileArg(arg: G.ArgDecl): Ast.ArgDecl = Ast.ArgDecl(arg.name, compile(arg.tpe))

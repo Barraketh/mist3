@@ -9,7 +9,8 @@ trait Parser {
 
 object FastparseParser extends Parser {
   override def parse(s: String): Program = {
-    fastparse.parse(s, Grammar.program(_)) match {
+    val grammar = new Grammar
+    fastparse.parse(s, grammar.program(_)) match {
       case Parsed.Success(value, _) => value
       case f: Parsed.Failure =>
         val t = f.trace()
@@ -19,20 +20,21 @@ object FastparseParser extends Parser {
   }
 }
 
-object Grammar {
-  val keyWords = List("true", "false")
-  val keySymbols = List("=", "=>")
-  val symbolChars = "+-*/|<>=@"
-
-  val precedenceMap = Map("+" -> 0, "-" -> 0, "*" -> 1, "/" -> 1)
-
+class Grammar {
+  import Grammar._
   import SingleLineWhitespace._
 
-  def str[_: P] = P("\"" ~~/ CharsWhile(_ != '"', 0).! ~~ "\"").map(s => Literal(s))
+  var id = 0
+  def nextId(): Int = {
+    id += 1
+    id
+  }
 
-  def int[_: P] = P(CharsWhileIn("0-9", 1).!).map(s => Literal(s.toInt))
+  def str[_: P] = P("\"" ~~/ CharsWhile(_ != '"', 0).! ~~ "\"").map(s => Literal(nextId(), s))
 
-  def bool[_: P] = P("true" | "false").!.map(s => Literal(s.toBoolean))
+  def int[_: P] = P(CharsWhileIn("0-9", 1).!).map(s => Literal(nextId(), s.toInt))
+
+  def bool[_: P] = P("true" | "false").!.map(s => Literal(nextId(), s.toBoolean))
 
   def alphaName[_: P] = P(CharIn("a-zA-Z_") ~~ CharsWhileIn("a-zA-Z0-9_", 0)).!.filter(s => !keyWords.contains(s))
 
@@ -40,12 +42,12 @@ object Grammar {
 
   def name[_: P] = P(alphaName | symbol)
 
-  def ident[_: P] = name.map(s => Ident(s))
+  def ident[_: P] = name.map(s => Ident(nextId(), s))
 
   def term[_: P]: P[Expr] = P(str | int | bool | ifP | block | ident)
 
   def ifP[_: P]: P[Expr] = P("if" ~/ "(" ~ expr ~ ")" ~ "\n".? ~ expr ~ "\n".? ~ "else" ~ "\n".? ~ expr).map {
-    case (cond, succ, fail) => If(cond, succ, fail)
+    case (cond, succ, fail) => If(nextId(), cond, succ, fail)
   }
 
   def funcApply[_: P]: P[Trailer] =
@@ -62,18 +64,22 @@ object Grammar {
   def expr[_: P]: P[Expr] = P(term ~ trailer.rep).map { case (e, items) =>
     items.foldLeft(e)((curExpr, tralier) =>
       tralier match {
-        case MemberRefTrailer(name) => Ast.MemberRef(curExpr, name)
-        case FuncApply(args)        => Call(curExpr, args)
+        case MemberRefTrailer(name) => Ast.MemberRef(nextId(), curExpr, name)
+        case FuncApply(args)        => Call(nextId(), curExpr, args)
         case InfixCall(op, arg) =>
           arg match {
-            case Call(Ident(otherOp), otherArgs, true) if {
+            case c @ Call(_, Ident(_, otherOp), otherArgs, true) if {
                   (for {
                     opPriority <- precedenceMap.get(op)
                     otherPriority <- precedenceMap.get(otherOp)
                   } yield opPriority > otherPriority).getOrElse(false)
                 } =>
-              Call(Ident(otherOp), List(Call(Ident(op), List(curExpr, otherArgs.head)), otherArgs(1)))
-            case _ => Call(Ident(op), List(curExpr, arg), isInfixCall = true)
+              Call(
+                nextId(),
+                Ident(nextId(), otherOp),
+                List(Call(nextId(), Ident(nextId(), op), List(curExpr, otherArgs.head)), otherArgs(1))
+              )
+            case _ => Call(nextId(), Ident(nextId(), op), List(curExpr, arg), isInfixCall = true)
           }
 
       }
@@ -91,7 +97,7 @@ object Grammar {
 
   def stmt[_: P] = P(valP | expr)
 
-  def block[_: P] = P("{" ~/ stmts ~ "}").map(Block)
+  def block[_: P] = P("{" ~/ stmts ~ "}").map(s => Block(nextId(), s))
 
   def stmts[_: P] = P("\n".rep ~ stmt.rep(0, "\n".rep(1)) ~ "\n".rep).map(_.toList)
 
@@ -103,9 +109,20 @@ object Grammar {
     P("\n".rep ~ topLevelStmt.rep(0, "\n".rep(1)) ~ "\n".rep).map(_.toList)
 
   def program[_: P]: P[Program] = P(topLevelStmts ~ stmts ~ End).map(Program.tupled)
+}
 
+object Grammar {
   sealed trait Trailer
+
   case class MemberRefTrailer(memberName: String) extends Trailer
+
   case class FuncApply(args: List[Expr]) extends Trailer
+
   case class InfixCall(name: String, arg: Expr) extends Trailer
+
+  val keyWords = List("true", "false")
+  val keySymbols = List("=", "=>")
+  val symbolChars = "+-*/|<>=@"
+
+  val precedenceMap = Map("+" -> 0, "-" -> 0, "*" -> 1, "/" -> 1)
 }

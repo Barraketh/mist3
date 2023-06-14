@@ -97,18 +97,18 @@ object Typer {
   }
 
   private def compileExpr(expr: Ast.Expr, env: TypeEnv): IR.Expr = expr match {
-    case Ast.Literal(value) =>
+    case Ast.Literal(_, value) =>
       value match {
         case i: Int     => IR.IntLiteral(i)
         case b: Boolean => IR.BoolLiteral(b)
         case s: String  => IR.StrLiteral(s)
       }
-    case Ast.Ident(name) =>
+    case Ast.Ident(_, name) =>
       val value = env.get(name).getOrElse(error(s"$name not found")).value match {
         case t: Type => t
       }
       IR.Ident(name, value)
-    case Ast.If(expr, success, fail) =>
+    case Ast.If(_, expr, success, fail) =>
       val resolvedExpr = compileExpr(expr, env)
       val compiledSuccess = compileExpr(success, env)
       val compiledFail = compileExpr(fail, env)
@@ -133,10 +133,10 @@ object Typer {
   }
 
   def toInterpreterExpr(e: Ast.Expr): IA.Expr = e match {
-    case Ast.Ident(name)  => IA.Ident(name)
-    case c: Ast.Call      => IA.Call(toInterpreterExpr(c.func), c.args.map(toInterpreterExpr))
-    case m: Ast.MemberRef => IA.Call(IA.Ident("getMember"), List(toInterpreterExpr(m.expr), IA.Literal(m.memberName)))
-    case other            => error(s"$other unsupported in type expressions")
+    case Ast.Ident(_, name) => IA.Ident(name)
+    case c: Ast.Call        => IA.Call(toInterpreterExpr(c.func), c.args.map(toInterpreterExpr))
+    case m: Ast.MemberRef   => IA.Call(IA.Ident("getMember"), List(toInterpreterExpr(m.expr), IA.Literal(m.memberName)))
+    case other              => error(s"$other unsupported in type expressions")
   }
 
   def toInterpreterStmts(stmts: List[Ast.TopLevelStmt], path: String): List[IA.Stmt] = {
@@ -213,7 +213,7 @@ object Typer {
 
     val body = program.stmts match {
       case (b: Block) :: Nil => b
-      case _                 => Block(program.stmts)
+      case _                 => Block(0, program.stmts)
     }
 
     IR.Program(irTopLevel, compileExpr(body, newEnv))
