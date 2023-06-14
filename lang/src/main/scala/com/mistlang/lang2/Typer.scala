@@ -2,20 +2,27 @@ package com.mistlang.lang2
 
 import com.mistlang.interpreter.RuntimeValue.Strict
 import com.mistlang.interpreter.{Env, RuntimeValue}
+import com.mistlang.lang.Ast._
 import com.mistlang.lang.Types._
-import com.mistlang.lang.{Type, TypeError, Types}
-import com.mistlang.lang2.Ast._
+import com.mistlang.lang.{Type, Types}
+
+object TypeCheck {
+
+  def checkType(expected: Type, actual: Type): Boolean = {
+    expected == AnyType || expected == actual
+  }
+  def validateType(expected: Type, actual: Type, name: String): Unit = {
+    if (checkType(expected, actual)) ()
+    else Typer.error(s"Failed typecheck for $name. Expected: $expected, actual: $actual")
+  }
+}
 
 object Typer {
   type TypeCache = collection.mutable.Map[Int, TypeObject]
 
-  case class TypeObject(tpe: Type, tags: Map[String, Any] = Map.empty) {
-    def stringTag(name: String): String = tags.get(name) match {
-      case Some(s: String) => s
-      case Some(other)     => error(s"Expected String tag for $this.$name - got $other")
-      case None            => error(s"Expected $this.$name to be statically known")
-    }
-  }
+  case class TypeError(msg: String) extends RuntimeException(msg)
+
+  case class TypeObject(tpe: Type, tags: Map[String, Any] = Map.empty)
 
   def error(s: String) = throw TypeError(s)
 
@@ -28,6 +35,7 @@ object Typer {
   class TyperVisitor extends Visitor[TypeObject] {
     val map: TypeCache = collection.mutable.Map.empty
     override def unit: TypeObject = TypeObject(UnitType)
+    override def evalTopLevel: Boolean = true
     override def asT(a: Any): TypeObject = a match {
       case t: TypeObject               => t
       case f: Function[List[Any], Any] => TypeObject(TypeConstructor(l => f(l).asInstanceOf[TypeObject]))
@@ -93,8 +101,40 @@ object Typer {
       TypeObject(FuncType(inputTypes.map(_.tpe), expectedOut.getOrElse(actualOut).tpe))
     }
 
-    override def as(a: As, env: Env[RuntimeValue]): TypeObject = asT(Interpreter.evalExpr(a.tpeExpr, env))
     override def cache(id: Int, t: TypeObject): Unit = map.put(id, t)
+    override def `if`(i: If, env: Env[RuntimeValue]): TypeObject = {
+      val cond = evalExpr(i.expr, env)
+      if (cond.tpe != BoolType) throw TypeError("Condition must be boolean")
+
+      val succ = evalExpr(i.success, env)
+      val fail = evalExpr(i.fail, env)
+
+      if (succ.tpe == fail.tpe) TypeObject(succ.tpe)
+      else TypeObject(AnyType)
+    }
+    override def memberRef(m: MemberRef, env: Env[RuntimeValue]): TypeObject = {
+      val ref = evalExpr(m.expr, env)
+      ref.tpe match {
+        case s: StructType =>
+          val resType = s.args.find(_._1 == m.memberName).getOrElse(error(s"Member name ${m.memberName} not found"))._2
+          TypeObject(resType)
+        case n: NamespaceType =>
+          val resType =
+            n.children.find(_._1 == m.memberName).getOrElse(error(s"Member name ${m.memberName} not found"))._2
+          TypeObject(resType)
+        case other => throw TypeError(s"Can not get member of ${other}")
+      }
+    }
+    override def struct(s: Struct, env: Env[RuntimeValue]): TypeObject = {
+      val argTypes = s.args.map(a => evalExpr(a.tpe, env).tpe)
+      TypeObject(StructType(s.name, "", s.args.map(_.name).zip(argTypes)))
+    }
+
+    override def namespace(n: Namespace, env: Env[RuntimeValue]): TypeObject = {
+      TypeObject(NamespaceType(n.children.map { c =>
+        c.name -> env.get(c.name).get.value.asInstanceOf[TypeObject].tpe
+      }.toMap))
+    }
   }
 
   private val stdEnv = {
@@ -106,51 +146,15 @@ object Typer {
       "Unit" -> (UnitType),
       "Any" -> (AnyType),
       "Int" -> (IntType),
-      "String" -> (StrType),
-      "if" -> TypeConstructor.make { case BoolType :: FuncType(_, succ) :: FuncType(_, fail) :: Nil =>
-        if (succ == fail) succ else AnyType
-      }
+      "String" -> (StrType)
     ).map { case (key, value) =>
       key -> TypeObject(value)
     }
 
-    val typeConstructors: Map[String, Any] = Map(
-      "StructType" -> RuntimeValue.Func({ case (name: String) :: args =>
-        val obj = args
-          .grouped(2)
-          .map { case (key: String) :: (tpe: TypeObject) :: Nil =>
-            key -> tpe.tpe
-          }
-          .toList
-        TypeObject(StructType(name, "", obj))
-      }),
-      "Object" -> RuntimeValue.Func({ case args: List[TypeObject] =>
-        val obj = args
-          .grouped(2)
-          .map { case (nameObj @ TypeObject(StrType, _)) :: value :: Nil =>
-            val key = nameObj.stringTag("value")
-            key -> value.tpe
-          }
-          .toList
-        TypeObject(StructType("", "", obj))
-      }),
-      "getMember" -> RuntimeValue.Func({
-        case TypeObject(s: StructType, _) :: keyArg :: Nil =>
-          val key = keyArg match {
-            case s: String => s
-            case keyObj @ TypeObject(StrType, _) =>
-              keyObj.stringTag("value")
-          }
-          TypeObject(s.args.find(_._1 == key).getOrElse(error(s"key ${key} not found in struct $s"))._2)
-        case other => error(s"Wrong type for $other")
-      }),
-      "Func" -> ((args: List[Any]) => {
-        val tpes = args.collect { case t: TypeObject => t.tpe }
-        TypeObject(FuncType(tpes.take(tpes.length - 1), tpes.last))
-      })
-    )
-
-    val intrinsics = basicTypes ++ typeConstructors
+    val intrinsics = basicTypes + ("Func" -> ((args: List[Any]) => {
+      val tpes = args.collect { case t: TypeObject => t.tpe }
+      TypeObject(FuncType(tpes.take(tpes.length - 1), tpes.last))
+    }))
 
     Env.make[RuntimeValue](
       intrinsics.map { case (name, v) => name -> (Strict(v): RuntimeValue) },

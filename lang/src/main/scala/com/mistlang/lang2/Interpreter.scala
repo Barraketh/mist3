@@ -2,12 +2,15 @@ package com.mistlang.lang2
 
 import com.mistlang.interpreter.RuntimeValue._
 import com.mistlang.interpreter.{Env, RuntimeValue}
-import com.mistlang.lang2.Ast._
+import com.mistlang.lang.Ast._
+import com.mistlang.lang.Types.NamespaceType
+import com.mistlang.lang2.Typer.{TypeObject, error}
 
 object Interpreter {
 
   object EvaluatorVisitor extends Visitor[Any] {
     override def unit: Any = UnitVal
+    override def evalTopLevel: Boolean = false
     override def asT(a: Any): Any = a
     override def literal(l: Literal): Any = l.value
     override def call(c: Call, env: Env[RuntimeValue]): Any = {
@@ -29,10 +32,30 @@ object Interpreter {
         evalExpr(l.body, newEnv.newScope)
       }
     }
-
-    override def as(a: As, env: Env[RuntimeValue]): Any = evalExpr(a.expr, env)
-
     override def cache(id: Int, t: Any): Unit = ()
+    override def `if`(i: If, env: Env[RuntimeValue]): Any = {
+      val evaluatedCond = evalExpr(i.expr, env).asInstanceOf[Boolean]
+      if (evaluatedCond) evalExpr(i.success, env) else evalExpr(i.fail, env)
+    }
+    override def memberRef(m: MemberRef, env: Env[RuntimeValue]): Any = {
+      val from = evalExpr(m.expr, env)
+      from match {
+        case map: Map[String, Any] => map(m.memberName)
+        case TypeObject(n: NamespaceType, _) =>
+          val resType = n.children.find(_._1 == m.memberName).getOrElse(error(s"${m.memberName} not found"))._2
+          TypeObject(resType)
+        case t => throw new RuntimeException(s"Expected Object or Namespace, got ${t.getClass.getName}")
+      }
+    }
+    override def struct(s: Struct, env: Env[RuntimeValue]): Any = { (args: List[Any]) =>
+      s.args.map(_.name).zip(args).toMap
+    }
+
+    override def namespace(n: Namespace, env: Env[RuntimeValue]): Any = {
+      n.children.map { c =>
+        c.name -> env.get(c.name).get.value
+      }.toMap
+    }
   }
 
   val stdEnv = {
@@ -60,19 +83,7 @@ object Interpreter {
       "==" -> f2[Any, Any]((a, b) => a == b),
       "Bool" -> f1[String](s => s.toBoolean),
       "Int" -> f1[String](s => s.toInt),
-      "Unit" -> UnitVal,
-      "if" -> f3[Boolean, Func, Func]((cond, success, failure) => if (cond) success(Nil) else failure(Nil)),
-      "Object" -> { (args: List[Any]) =>
-        val obj = args
-          .grouped(2)
-          .map { case (key: String) :: value :: Nil =>
-            key -> value
-          }
-          .toMap
-
-        obj
-      },
-      "getMember" -> f2[Map[String, Any], String]((map, key) => map(key))
+      "Unit" -> UnitVal
     )
 
     Env.make(

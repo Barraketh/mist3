@@ -87,7 +87,9 @@ class Grammar {
   }
 
   def valP[_: P] = P("val " ~/ name ~ "=" ~ expr).map { case (n, e) => Val(n, e) }
-  def defP[_: P] = P("def " ~/ name ~ argDeclList ~/ (":" ~ expr) ~/ ("=" ~ expr)).map(Def.tupled)
+  def defP[_: P] = P("def " ~/ name ~ argDeclList ~/ (":" ~ expr) ~/ ("=" ~ expr)).map {
+    case (name, args, outputType, body) => Def(Lambda(nextId(), Some(name), args, Some(outputType), body))
+  }
 
   def struct[_: P] = P("struct" ~/ name ~ argDeclList).map { case (name, args) => Struct(name, args) }
 
