@@ -45,26 +45,36 @@ object Evaluator {
       case Val(name, expr) =>
         val evaluated = evalExpr(env, expr, v)
         (env.put(name, Strict(evaluated)), v.unit)
-      case d: Def =>
-        env.set(d.name, Lazy(() => evalExpr(env, d.lambda, v)))
-        (env, v.unit)
-      case s: Struct =>
-        env.set(s.name, Lazy(() => v.struct(s, env)))
-        (env, v.unit)
-      case n: Namespace =>
-        val namespaceEnv = runAll(env.newScope, n.children, v)._1
-        env.set(n.name, Lazy(() => v.namespace(n, namespaceEnv)))
-        (env, v.unit)
     }
   }
 
   def runAll[T](env: Env[RuntimeValue], stmts: List[Stmt], v: Visitor[T]): (Env[RuntimeValue], T) = {
-    val topLevel = stmts.collect { case c: TopLevelStmt => c.name }
-    val newEnv = topLevel.foldLeft(env) { case (curEnv, nextName) => curEnv.put(nextName, Strict(null)) }
+    stmts.foldLeft((env, v.unit)) { case ((curEnv, _), nextStmt) =>
+      run(curEnv, nextStmt, v)
+    }
+  }
 
-    stmts
-      .foldLeft((newEnv, v.unit)) { case ((curEnv, _), nextStmt) =>
-        run(curEnv, nextStmt, v)
-      }
+  def runTopLevel[T](env: Env[RuntimeValue], stmt: TopLevelStmt, v: Visitor[T]): Unit = {
+    stmt match {
+      case d: Def    => env.set(d.name, Lazy(() => evalExpr(env, d.lambda, v)))
+      case s: Struct => env.set(s.name, Lazy(() => v.struct(s, env)))
+      case n: Namespace =>
+        val namespaceEnv = runAllTopLevel(env.newScope, n.children, v)
+        env.set(n.name, Lazy(() => v.namespace(n, namespaceEnv)))
+    }
+  }
+
+  def runAllTopLevel[T](env: Env[RuntimeValue], stmts: List[TopLevelStmt], v: Visitor[T]): Env[RuntimeValue] = {
+    val newEnv = stmts.map(_.name).foldLeft(env) { case (curEnv, nextName) => curEnv.put(nextName, Strict(null)) }
+    stmts.foreach(stmt => runTopLevel(newEnv, stmt, v))
+    if (v.evalTopLevel) {
+      stmts.foreach(s => newEnv.get(s.name).foreach(_.value))
+    }
+    newEnv
+  }
+
+  def runProgram[T](env: Env[RuntimeValue], p: Program, v: Visitor[T]): T = {
+    val nextEnv = runAllTopLevel(env, p.topLevelStmts, v)
+    runAll(nextEnv, p.stmts, v)._2
   }
 }

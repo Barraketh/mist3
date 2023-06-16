@@ -62,9 +62,6 @@ object Typer {
             checkType(expected, actual.tpe)
           }
           TypeObject(out)
-        case TypeConstructor(f) =>
-          val typedArgs = c.args.map(e => evalExpr(e, env))
-          f(typedArgs)
         case StructType(_, _, expectedArgs) =>
           if (expectedArgs.length != c.args.length)
             error(s"Wrong number of arguments: expected ${expectedArgs.length}, got ${c.args.length}")
@@ -162,6 +159,6 @@ object Typer {
     )
   }
 
-  def typeStmts(stmts: List[Stmt]): TypeObject = Evaluator.runAll(stdEnv, stmts, new TyperVisitor())._2
+  def typeStmts(p: Program): TypeObject = Evaluator.runProgram(stdEnv, p, new TyperVisitor())
 
 }

@@ -2,10 +2,7 @@ package com.mistlang.lang
 
 object Ast {
   case class Program(topLevelStmts: List[TopLevelStmt], stmts: List[Stmt])
-
-  sealed trait Stmt
-
-  sealed trait TopLevelStmt extends Stmt {
+  sealed trait TopLevelStmt {
     def name: String
   }
   case class ArgDecl(name: String, tpe: Expr)
@@ -15,6 +12,7 @@ object Ast {
   case class Struct(name: String, args: List[ArgDecl]) extends TopLevelStmt
   case class Namespace(name: String, children: List[TopLevelStmt]) extends TopLevelStmt
 
+  sealed trait Stmt
   case class Val(name: String, expr: Expr) extends Stmt
 
   sealed trait Expr extends Stmt {

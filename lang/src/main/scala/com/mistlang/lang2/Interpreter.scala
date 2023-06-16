@@ -71,18 +71,11 @@ object Interpreter {
       f(l.head.asInstanceOf[A], l(1).asInstanceOf[B])
     }
 
-    def f3[A, B, C](f: (A, B, C) => Any): Func = l => {
-      assert(l.length == 3)
-      f(l(0).asInstanceOf[A], l(1).asInstanceOf[B], l(2).asInstanceOf[C])
-    }
-
     val intrinsics: Map[String, Any] = Map(
       "+" -> f2[Int, Int]((a, b) => a + b),
       "-" -> f2[Int, Int]((a, b) => a - b),
       "*" -> f2[Int, Int]((a, b) => a * b),
       "==" -> f2[Any, Any]((a, b) => a == b),
-      "Bool" -> f1[String](s => s.toBoolean),
-      "Int" -> f1[String](s => s.toInt),
       "Unit" -> UnitVal
     )
 
@@ -94,6 +87,6 @@ object Interpreter {
 
   def evalExpr(e: Expr, env: Env[RuntimeValue]): Any = EvaluatorVisitor.evalExpr(e, env)
 
-  def run(stmts: List[Stmt]): Any = Evaluator.runAll(stdEnv, stmts, EvaluatorVisitor)._2
+  def run(p: Program): Any = Evaluator.runProgram(stdEnv, p, EvaluatorVisitor)
 
 }
