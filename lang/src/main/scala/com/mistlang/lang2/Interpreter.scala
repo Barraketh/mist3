@@ -4,7 +4,7 @@ import com.mistlang.interpreter.RuntimeValue._
 import com.mistlang.interpreter.{Env, RuntimeValue}
 import com.mistlang.lang.Ast._
 import com.mistlang.lang.Types.NamespaceType
-import com.mistlang.lang2.Typer.{TypeObject, error}
+import com.mistlang.lang2.Typer.error
 
 object Interpreter {
 
@@ -41,9 +41,8 @@ object Interpreter {
       val from = evalExpr(m.expr, env)
       from match {
         case map: Map[String, Any] => map(m.memberName)
-        case TypeObject(n: NamespaceType, _) =>
-          val resType = n.children.find(_._1 == m.memberName).getOrElse(error(s"${m.memberName} not found"))._2
-          TypeObject(resType)
+        case n: NamespaceType =>
+          n.children.find(_._1 == m.memberName).getOrElse(error(s"${m.memberName} not found"))._2
         case t => throw new RuntimeException(s"Expected Object or Namespace, got ${t.getClass.getName}")
       }
     }

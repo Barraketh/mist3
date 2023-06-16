@@ -10,7 +10,7 @@ class TyperTest extends AnyFlatSpec with should.Matchers {
 
   def run(s: String): Type = {
     val e = FastparseParser.parse(s)
-    Typer.typeStmts(e).tpe
+    Typer.typeStmts(e)
   }
 
   "Intrinsic params" should "work correctly" in {
