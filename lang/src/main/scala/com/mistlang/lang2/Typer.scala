@@ -114,9 +114,9 @@ object Typer {
         case other => throw TypeError(s"Can not get member of ${other}")
       }
     }
-    override def struct(s: Struct, env: Env[RuntimeValue]): Type = {
+    override def struct(s: Struct, path: String, env: Env[RuntimeValue]): Type = {
       val argTypes = s.args.map(a => evalExpr(a.tpe, env))
-      StructType(s.name, "", s.args.map(_.name).zip(argTypes))
+      StructType(s.name, path, s.args.map(_.name).zip(argTypes))
     }
 
     override def namespace(n: Namespace, env: Env[RuntimeValue]): Type = {
@@ -149,6 +149,12 @@ object Typer {
       intrinsics.map { case (name, v) => name -> (Strict(v): RuntimeValue) },
       None
     )
+  }
+
+  def typeAll(p: Program): Typer.TypeCache = {
+    val visitor = new TyperVisitor
+    Evaluator.runProgram(stdEnv, p, visitor)
+    visitor.map
   }
 
   def typeStmts(p: Program): Type = Evaluator.runProgram(stdEnv, p, new TyperVisitor())

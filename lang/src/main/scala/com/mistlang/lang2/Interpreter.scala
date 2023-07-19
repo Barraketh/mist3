@@ -46,7 +46,7 @@ object Interpreter {
         case t => throw new RuntimeException(s"Expected Object or Namespace, got ${t.getClass.getName}")
       }
     }
-    override def struct(s: Struct, env: Env[RuntimeValue]): Any = { (args: List[Any]) =>
+    override def struct(s: Struct, path: String, env: Env[RuntimeValue]): Any = { (args: List[Any]) =>
       s.args.map(_.name).zip(args).toMap
     }
 

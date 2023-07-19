@@ -14,7 +14,7 @@ trait Visitor[T] {
   def cache(id: Int, t: T): Unit
   def `if`(i: If, env: Env[RuntimeValue]): T
   def memberRef(m: MemberRef, env: Env[RuntimeValue]): T
-  def struct(s: Struct, env: Env[RuntimeValue]): T
+  def struct(s: Struct, path: String, env: Env[RuntimeValue]): T
   def namespace(n: Namespace, env: Env[RuntimeValue]): T
   def evalExpr(e: Expr, env: Env[RuntimeValue]): T = Evaluator.evalExpr(env, e, this)
 
@@ -54,19 +54,25 @@ object Evaluator {
     }
   }
 
-  def runTopLevel[T](env: Env[RuntimeValue], stmt: TopLevelStmt, v: Visitor[T]): Unit = {
+  def runTopLevel[T](env: Env[RuntimeValue], stmt: TopLevelStmt, path: String, v: Visitor[T]): Unit = {
     stmt match {
       case d: Def    => env.set(d.name, Lazy(() => evalExpr(env, d.lambda, v)))
-      case s: Struct => env.set(s.name, Lazy(() => v.struct(s, env)))
+      case s: Struct => env.set(s.name, Lazy(() => v.struct(s, path, env)))
       case n: Namespace =>
-        val namespaceEnv = runAllTopLevel(env.newScope, n.children, v)
+        val newPath = if (path.isEmpty) n.name else path + "." + n.name
+        val namespaceEnv = runAllTopLevel(env.newScope, n.children, newPath, v)
         env.set(n.name, Lazy(() => v.namespace(n, namespaceEnv)))
     }
   }
 
-  def runAllTopLevel[T](env: Env[RuntimeValue], stmts: List[TopLevelStmt], v: Visitor[T]): Env[RuntimeValue] = {
+  def runAllTopLevel[T](
+      env: Env[RuntimeValue],
+      stmts: List[TopLevelStmt],
+      path: String,
+      v: Visitor[T]
+  ): Env[RuntimeValue] = {
     val newEnv = stmts.map(_.name).foldLeft(env) { case (curEnv, nextName) => curEnv.put(nextName, Strict(null)) }
-    stmts.foreach(stmt => runTopLevel(newEnv, stmt, v))
+    stmts.foreach(stmt => runTopLevel(newEnv, stmt, path, v))
     if (v.evalTopLevel) {
       stmts.foreach(s => newEnv.get(s.name).foreach(_.value))
     }
@@ -74,7 +80,7 @@ object Evaluator {
   }
 
   def runProgram[T](env: Env[RuntimeValue], p: Program, v: Visitor[T]): T = {
-    val nextEnv = runAllTopLevel(env, p.topLevelStmts, v)
+    val nextEnv = runAllTopLevel(env, p.topLevelStmts, "", v)
     runAll(nextEnv, p.stmts, v)._2
   }
 }
