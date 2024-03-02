@@ -1,4 +1,4 @@
-package com.mistlang.lang2
+package com.mistlang.lang
 
 import com.mistlang.interpreter.RuntimeValue.{Lazy, Strict}
 import com.mistlang.interpreter.{Env, RuntimeValue}

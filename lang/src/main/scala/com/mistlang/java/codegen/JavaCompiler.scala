@@ -1,8 +1,7 @@
 package com.mistlang.java.codegen
 
 import com.mistlang.lang.Types._
-import com.mistlang.lang.{Ast, Type}
-import com.mistlang.lang2.Typer
+import com.mistlang.lang.{Ast, Type, Typer}
 
 object JavaCompiler {
   val unitInstance = JavaAst.Ident("Unit.unit")

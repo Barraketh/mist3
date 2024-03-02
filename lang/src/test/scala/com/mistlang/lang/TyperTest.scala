@@ -1,8 +1,7 @@
 package com.mistlang.lang
 
 import com.mistlang.lang.Types._
-import com.mistlang.lang2.Typer.TypeError
-import com.mistlang.lang2.{TypeCheck, Typer}
+import Typer.TypeError
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers._
 

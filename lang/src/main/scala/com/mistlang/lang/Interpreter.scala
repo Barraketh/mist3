@@ -1,10 +1,10 @@
-package com.mistlang.lang2
+package com.mistlang.lang
 
 import com.mistlang.interpreter.RuntimeValue._
 import com.mistlang.interpreter.{Env, RuntimeValue}
 import com.mistlang.lang.Ast._
+import com.mistlang.lang.Typer.error
 import com.mistlang.lang.Types.NamespaceType
-import com.mistlang.lang2.Typer.error
 
 object Interpreter {
 

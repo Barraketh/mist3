@@ -1,10 +1,9 @@
-package com.mistlang.lang2
+package com.mistlang.lang
 
 import com.mistlang.interpreter.RuntimeValue.Strict
 import com.mistlang.interpreter.{Env, RuntimeValue}
 import com.mistlang.lang.Ast._
 import com.mistlang.lang.Types._
-import com.mistlang.lang.{Type, Types}
 
 object TypeCheck {
 
