@@ -210,7 +210,7 @@ object JavaCompiler {
 
   private def childExprs(stmt: Ast.TopLevelStmt): List[Ast.Expr] = stmt match {
     case Ast.Def(lambda)            => lambda :: Nil
-    case Ast.Struct(_, args)        => args.map(_.tpe)
+    case Ast.Struct(_, _, args)        => args.map(_.tpe)
     case Ast.Namespace(_, children) => children.flatMap(c => childExprs(c))
   }
 

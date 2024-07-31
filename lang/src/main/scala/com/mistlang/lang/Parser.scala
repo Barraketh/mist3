@@ -44,7 +44,9 @@ class Grammar {
 
   def ident[_: P] = name.map(s => Ident(nextId(), s))
 
-  def term[_: P]: P[Expr] = P(str | int | bool | ifP | block | ident)
+  def literal[_: P]: P[TypeExpr] = P(str | int | bool)
+
+  def term[_: P]: P[Expr] = P(literal | ifP | block | ident)
 
   def ifP[_: P]: P[Expr] = P("if" ~/ "(" ~ expr ~ ")" ~ "\n".? ~ expr ~ "\n".? ~ "else" ~ "\n".? ~ expr).map {
     case (cond, succ, fail) => If(nextId(), cond, succ, fail)
@@ -86,16 +88,30 @@ class Grammar {
     )
   }
 
+  def typeApply[_: P]: P[TypeApply] =
+    P("[" ~/ ("\n".rep ~ typeExpr ~ "\n".rep).rep(1, ",") ~ "]").map(args => TypeApply(args.toList))
+
+  def typeTerm[_: P]: P[TypeExpr] = P(literal | ident)
+
+  def typeExpr[_: P]: P[TypeExpr] = (typeTerm ~ typeApply.?).map {
+    case (e, Some(ta)) => Call(nextId(), e, ta.args)
+    case (e, None)     => e
+  }
+
   def valP[_: P] = P("val " ~/ name ~ "=" ~ expr).map { case (n, e) => Val(n, e) }
-  def defP[_: P] = P("def " ~/ name ~ argDeclList ~/ (":" ~ expr) ~/ ("=" ~ expr)).map {
+  def defP[_: P] = P("def " ~/ name ~ argDeclList ~/ (":" ~ typeExpr) ~/ ("=" ~ expr)).map {
     case (name, args, outputType, body) => Def(Lambda(nextId(), Some(name), args, Some(outputType), body))
   }
 
-  def struct[_: P] = P("struct" ~/ name ~ argDeclList).map { case (name, args) => Struct(name, args) }
+  def struct[_: P] = P("struct" ~/ name ~ typeArgList.? ~ argDeclList).map { case (name, typeArgs, args) =>
+    Struct(name, typeArgs.getOrElse(Nil), args)
+  }
 
-  def argDecl[_: P] = P(name ~/ ":" ~ expr).map(ArgDecl.tupled)
+  def argDecl[_: P] = P(name ~/ ":" ~ typeExpr).map(ArgDecl.tupled)
 
   def argDeclList[_: P] = P("(" ~/ argDecl.rep(0, ",") ~ ")").map(_.toList)
+
+  def typeArgList[_: P] = P("[" ~/ argDecl.rep(min = 1, sep = ",") ~ "]").map(_.toList)
 
   def stmt[_: P] = P(valP | expr)
 
@@ -119,6 +135,7 @@ object Grammar {
   case class MemberRefTrailer(memberName: String) extends Trailer
 
   case class FuncApply(args: List[Expr]) extends Trailer
+  case class TypeApply(args: List[Expr]) extends Trailer
 
   case class InfixCall(name: String, arg: Expr) extends Trailer
 

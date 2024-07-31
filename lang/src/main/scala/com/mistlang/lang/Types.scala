@@ -1,6 +1,8 @@
 package com.mistlang.lang
 
-sealed trait Type
+sealed trait Comptime
+
+sealed trait Type extends Comptime
 
 object Types {
   case object AnyType extends Type
@@ -12,4 +14,12 @@ object Types {
   case class FuncType(args: List[Type], out: Type) extends Type
   case class StructType(name: String, namespace: String, args: List[(String, Type)]) extends Type
   case class NamespaceType(children: Map[String, Type]) extends Type
+}
+
+sealed trait ComptimeValue extends Comptime
+object ComptimeValue {
+  case class IntValue(i: Int) extends ComptimeValue
+  case class BoolValue(b: Boolean) extends ComptimeValue
+  case class StringValue(s: String) extends ComptimeValue
+
 }
