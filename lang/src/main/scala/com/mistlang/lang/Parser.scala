@@ -55,7 +55,7 @@ class Grammar {
   def funcApply[_: P]: P[Trailer] =
     P("(" ~/ ("\n".rep ~ expr ~ "\n".rep).rep(0, ",") ~ ")").map(args => FuncApply(args.toList))
 
-  def memberRef[_: P]: P[Trailer] = P("." ~/ name).map(n => MemberRefTrailer(n))
+  def memberRef[_: P]: P[TypeTrailer] = P("." ~/ name).map(n => MemberRefTrailer(n))
 
   def infixCall[_: P]: P[Trailer] = P(symbol ~/ expr).map { case (s, e) =>
     InfixCall(s, e)
@@ -91,11 +91,17 @@ class Grammar {
   def typeApply[_: P]: P[TypeApply] =
     P("[" ~/ ("\n".rep ~ typeExpr ~ "\n".rep).rep(1, ",") ~ "]").map(args => TypeApply(args.toList))
 
+  def typeTrailer[_: P]: P[TypeTrailer] = P(memberRef | typeApply)
+
   def typeTerm[_: P]: P[TypeExpr] = P(literal | ident)
 
-  def typeExpr[_: P]: P[TypeExpr] = (typeTerm ~ typeApply.?).map {
-    case (e, Some(ta)) => Call(nextId(), e, ta.args)
-    case (e, None)     => e
+  def typeExpr[_: P]: P[TypeExpr] = (typeTerm ~ typeTrailer.rep(0, ",")).map { case (e, items) =>
+    items.foldLeft(e) { (curExp, trailer) =>
+      trailer match {
+        case TypeApply(args)              => Call(nextId(), curExp, args)
+        case MemberRefTrailer(memberName) => Ast.MemberRef(nextId(), curExp, memberName)
+      }
+    }
   }
 
   def valP[_: P] = P("val " ~/ name ~ "=" ~ expr).map { case (n, e) => Val(n, e) }
@@ -131,11 +137,11 @@ class Grammar {
 
 object Grammar {
   sealed trait Trailer
-
-  case class MemberRefTrailer(memberName: String) extends Trailer
+  sealed trait TypeTrailer extends Trailer
+  case class TypeApply(args: List[Expr]) extends TypeTrailer
+  case class MemberRefTrailer(memberName: String) extends TypeTrailer
 
   case class FuncApply(args: List[Expr]) extends Trailer
-  case class TypeApply(args: List[Expr]) extends Trailer
 
   case class InfixCall(name: String, arg: Expr) extends Trailer
 
