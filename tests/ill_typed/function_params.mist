@@ -1,0 +1,2 @@
+def foo(a: Int, b: String): Int = a
+foo("1", "s")

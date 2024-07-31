@@ -1,0 +1,3 @@
+struct Foo(a: Int, b: Int)
+
+def f1(foo: Foo): String = foo.b

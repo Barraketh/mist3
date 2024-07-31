@@ -1,9 +1,12 @@
 package com.mistlang.lang
 
-class InterpreterTest extends RuntimeTests {
+object InterpreterTest extends App {
   def runProgram(p: Ast.Program): Any = {
     Typer.typeStmts(p)
     Interpreter.run(p)
   }
+
+  val runner = new RuntimeTestRunner(runProgram)
+  runner.runTests()
 
 }

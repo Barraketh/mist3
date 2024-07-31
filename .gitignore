@@ -7,5 +7,5 @@ target
 .VSCodeCounter
 .metals
 .bloop
-test
+scratch_dir/*
 metals.sbt

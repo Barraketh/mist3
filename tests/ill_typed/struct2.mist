@@ -1,0 +1,2 @@
+struct Foo(a: Int, b: String)
+val foo = Foo(3, 3)

@@ -1,0 +1,17 @@
+8
+
+def foo(): Foo.FooStruct = Foo.FooStruct(Foo.Bar.b(), "hello")
+
+namespace Foo {
+  struct FooStruct(a: Int, b: String)
+
+  def a(): Int = 3
+
+  namespace Bar {
+    def a(): Int = 5
+
+    def b(): Int = a() + 3
+  }
+}
+
+foo().a
