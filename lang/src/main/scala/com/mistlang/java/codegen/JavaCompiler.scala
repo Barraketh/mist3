@@ -208,39 +208,10 @@ object JavaCompiler {
     case n: Ast.Namespace => JavaAst.Namespace(n.name, n.children.map(s => compileTopLevel(s, types)))
   }
 
-  private def childExprs(stmt: Ast.TopLevelStmt): List[Ast.Expr] = stmt match {
-    case Ast.Def(lambda)            => lambda :: Nil
-    case Ast.Struct(_, _, args)        => args.map(_.tpe)
-    case Ast.Namespace(_, children) => children.flatMap(c => childExprs(c))
-  }
-
-  private def childExprs(expr: Ast.Stmt): List[Ast.Expr] = expr match {
-    case v: Ast.Val                    => v.expr :: Nil
-    case e: Ast.Call                   => e.func :: e.args
-    case e: Ast.If                     => List(e.expr, e.success, e.fail)
-    case e: Ast.MemberRef              => List(e.expr)
-    case e: Ast.Block                  => e.stmts.flatMap(childExprs)
-    case e: Ast.Lambda                 => e.body :: e.args.map(_.tpe) ::: e.outType.toList
-    case _: Ast.Literal | _: Ast.Ident => Nil
-
-  }
-
-  private def maxExprId(expr: Ast.Expr): Int = {
-    val childIds = childExprs(expr).map(maxExprId)
-    (expr.id :: childIds).max
-  }
-
-  private def maxId(ast: Ast.Ast): Int = {
-    ast match {
-      case stmt: Ast.TopLevelStmt => childExprs(stmt).map(maxExprId).max
-      case v: Ast.Val             => maxExprId(v.expr)
-      case e: Ast.Expr            => maxExprId(e)
-    }
-  }
+  val maxExprId: Int = 10_000_000
 
   def compile(p: Ast.Program): JavaAst.Program = {
-    val curMaxId = (p.topLevelStmts ::: p.stmts).map(maxId).max
-    val runFunc = Ast.Lambda(curMaxId + 1, Some("run"), Nil, None, Ast.Block(curMaxId + 2, p.stmts))
+    val runFunc = Ast.Lambda(maxExprId + 1, Some("run"), Nil, None, Ast.Block(maxExprId + 2, p.stmts))
     val p2 = Ast.Program(Ast.Def(runFunc) :: p.topLevelStmts, Nil)
 
     val types = Typer.typeAll(p2)

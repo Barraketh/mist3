@@ -10,7 +10,8 @@ object Ast {
   case class Def(lambda: Lambda) extends TopLevelStmt {
     override def name: String = lambda.name.get
   }
-  case class Struct(name: String, typeArgs: List[ArgDecl], args: List[ArgDecl]) extends TopLevelStmt
+  case class Struct(name: String, typeArgs: List[ArgDecl], args: List[ArgDecl], children: List[TopLevelStmt])
+    extends TopLevelStmt
   case class Namespace(name: String, children: List[TopLevelStmt]) extends TopLevelStmt
 
   sealed trait Stmt extends Ast

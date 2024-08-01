@@ -109,8 +109,11 @@ class Grammar {
     case (name, args, outputType, body) => Def(Lambda(nextId(), Some(name), args, Some(outputType), body))
   }
 
-  def struct[_: P] = P("struct" ~/ name ~ typeArgList.? ~ argDeclList).map { case (name, typeArgs, args) =>
-    Struct(name, typeArgs.getOrElse(Nil), args)
+  def topLevelBlock[_: P]: P[List[TopLevelStmt]] = P("{") ~ topLevelStmts ~ "}"
+
+  def struct[_: P] = P("struct" ~/ name ~ typeArgList.? ~ argDeclList ~ topLevelBlock.?).map {
+    case (name, typeArgs, args, stmts) =>
+      Struct(name, typeArgs.getOrElse(Nil), args, stmts.getOrElse(Nil))
   }
 
   def argDecl[_: P] = P(name ~/ ":" ~ typeExpr).map(ArgDecl.tupled)
