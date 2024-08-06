@@ -1,16 +1,16 @@
 package com.mistlang.interpreter
 
-sealed trait RuntimeValue {
-  def value: Any
+sealed trait RuntimeValue[T] {
+  def value: T
 }
 object RuntimeValue {
-  case class Strict(value: Any) extends RuntimeValue
-  case class Lazy(get: () => Any) extends RuntimeValue {
+  case class Strict[T](value: T) extends RuntimeValue[T]
+  case class Lazy[T](get: () => T) extends RuntimeValue[T] {
     var computing = false
     var computed = false
-    var cached: Any = _
+    var cached: T = _
 
-    override def value: Any = {
+    override def value: T = {
       if (computed) cached
       else if (computing) throw new RuntimeException("Recursive lazy evaluation")
       else {
@@ -22,8 +22,4 @@ object RuntimeValue {
 
     }
   }
-
-  object UnitVal
-
-  def Func(f: PartialFunction[List[Any], Any]): Function[List[Any], Any] = l => f(l)
 }

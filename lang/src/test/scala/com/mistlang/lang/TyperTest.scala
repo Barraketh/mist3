@@ -1,6 +1,6 @@
 package com.mistlang.lang
 
-import com.mistlang.lang.Typer.TypeError
+import com.mistlang.lang.TypeInterpreter.TypeError
 
 import java.nio.file.{FileSystems, Files, Path}
 import scala.io.Source
@@ -10,7 +10,7 @@ object TyperTest extends App {
 
   def run(s: String): Type = {
     val e = FastparseParser.parse(s)
-    Typer.typeStmts(e)
+    TypeInterpreter.typeStmts(e)
   }
 
   def runTest(path: Path): Unit = {
@@ -21,12 +21,11 @@ object TyperTest extends App {
 
     val e = FastparseParser.parse(s)
     try {
-      Typer.typeStmts(e)
+      TypeInterpreter.typeStmts(e)
       assert(false, "Ill typed program typechecked")
     } catch {
       case e: TypeError =>
     }
-
   }
 
   def runTests(): Unit = {
