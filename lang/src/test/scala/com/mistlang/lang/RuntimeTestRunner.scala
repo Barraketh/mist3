@@ -26,7 +26,7 @@ class RuntimeTestRunner(runProgram: Ast.Program => Any) {
       val res = renderRes(runProgram(p))
       assert(res == expected, s"Expected $expected, got $res")
     } catch {
-      case e: Exception =>
+      case e =>
         println(s"$path FAILED: ${e}")
         e.printStackTrace()
     }

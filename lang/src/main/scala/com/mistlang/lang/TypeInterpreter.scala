@@ -1,13 +1,14 @@
 package com.mistlang.lang
 
-import com.mistlang.interpreter.RuntimeValue.Strict
+import com.mistlang.interpreter.RuntimeValue.{Lazy, Strict}
 import com.mistlang.interpreter.{Env, RuntimeValue}
-import com.mistlang.lang.Ast.Program
+import com.mistlang.lang.Ast._
 import com.mistlang.lang.ComptimeValue._
 import com.mistlang.lang.Types._
 
-class TypeInterpreter extends BaseInterpreter[TypedValue] {
+class TypeInterpreter {
   import TypeInterpreter.error
+  type MyEnvType = Env[RuntimeValue[TypedValue]]
 
   val cache = collection.mutable.Map[Int, TypedValue]()
 
@@ -17,7 +18,7 @@ class TypeInterpreter extends BaseInterpreter[TypedValue] {
     }
   }
 
-  override def evalExpr(env: MyEnvType, expr: Ast.Expr): TypedValue = {
+  def evalExpr(env: MyEnvType, expr: Ast.Expr, evalValues: Boolean): TypedValue = {
     val res = expr match {
       case Ast.Literal(_, value) =>
         value match {
@@ -31,7 +32,7 @@ class TypeInterpreter extends BaseInterpreter[TypedValue] {
           .getOrElse { error(s"$name not found") }
           .value
       case Ast.Call(_, func, args, _) =>
-        val typedF = evalExpr(env, func)
+        val typedF = evalExpr(env, func, evalValues)
         typedF match {
           case TypedValue(FuncType(funcArgs, out, isStar), value) =>
             val expectedArgs = if (isStar) {
@@ -40,25 +41,26 @@ class TypeInterpreter extends BaseInterpreter[TypedValue] {
             if (expectedArgs.length != args.length)
               error(s"Wrong number of arguments: expected ${expectedArgs.length}, got ${args.length}")
 
-            val typedArgs = args.map(e => evalExpr(env, e))
+            val typedArgs = args.map(e => evalExpr(env, e, evalValues))
 
             expectedArgs.zip(typedArgs).foreach { case (expected, actual) =>
               checkType(expected, actual.tpe)
             }
 
-            val resValue = if (value.isDefined && typedArgs.forall(_.value.isDefined)) {
-              Some(value.get.asInstanceOf[Func].f(typedArgs))
-            } else None
+            val resValue = value match {
+              case Some(f: Func) if evalValues && typedArgs.forall(_.value.isDefined) => Some(f.f(typedArgs))
+              case _                                                                  => None
+            }
             TypedValue(out, resValue.flatMap(_.value))
           case TypedValue(TypeType, Some(resType @ StructType(_, _, expectedArgs))) =>
             if (expectedArgs.length != args.length)
               error(s"Wrong number of arguments: expected ${expectedArgs.length}, got ${args.length}")
 
-            val typedArgs = args.map(e => evalExpr(env, e))
+            val typedArgs = args.map(e => evalExpr(env, e, evalValues))
             expectedArgs.zip(typedArgs).foreach { case (expected, actual) =>
               checkType(expected._2, actual.tpe)
             }
-            val resValue = if (typedArgs.forall(_.value.isDefined)) {
+            val resValue = if (evalValues && typedArgs.forall(_.value.isDefined)) {
               val map = expectedArgs.map(_._1).zip(typedArgs.map(_.value.get)).toMap
               Some(Dict(map))
             } else None
@@ -66,7 +68,7 @@ class TypeInterpreter extends BaseInterpreter[TypedValue] {
           case _ => error(s"Cannot call $typedF")
         }
       case Ast.MemberRef(_, expr, memberName) =>
-        val ref = evalExpr(env, expr)
+        val ref = evalExpr(env, expr, evalValues)
         val resType = ref.tpe match {
           case s: StructType =>
             s.args.find(_._1 == memberName).getOrElse(error(s"Member name ${memberName} not found"))._2
@@ -80,11 +82,18 @@ class TypeInterpreter extends BaseInterpreter[TypedValue] {
         }
         TypedValue(resType, value)
       case Ast.If(_, expr, success, fail) =>
-        val cond = evalExpr(env, expr)
+        val cond = evalExpr(env, expr, evalValues)
         if (cond.tpe != BoolType) error("Condition must be boolean")
 
-        val typedSucc = evalExpr(env, success)
-        val typedFail = evalExpr(env, fail)
+        val (evalSuccessValue, evalFailValue) = cond.value match {
+          case Some(PrimitiveValue(condValue: Boolean)) if evalValues =>
+            if (condValue) (true, false)
+            else (false, true)
+          case _ => (false, false)
+        }
+
+        val typedSucc = evalExpr(env, success, evalSuccessValue)
+        val typedFail = evalExpr(env, fail, evalFailValue)
 
         val resType = if (typedSucc.tpe == typedFail.tpe) typedSucc.tpe else AnyType
         val value = cond.value.flatMap { c =>
@@ -92,13 +101,13 @@ class TypeInterpreter extends BaseInterpreter[TypedValue] {
           else typedFail.value
         }
         TypedValue(resType, value)
-      case Ast.Block(_, stmts) => runAll(env.newScope, stmts)._2
+      case Ast.Block(_, stmts) => runAll(env.newScope, stmts, evalValues)._2
       case Ast.Lambda(_, name, args, outType, body) =>
-        val inputTypes = args.map { arg => evalExpr(env, arg.tpe) }.map {
+        val inputTypes = args.map { arg => evalExpr(env, arg.tpe, evalValues) }.map {
           case TypedValue(TypeType, Some(tpe)) => tpe.asInstanceOf[Type]
           case other                           => error(s"Cannot decode type of ${other}")
         }
-        val expectedOut = outType.map(o => evalExpr(env, o)).map {
+        val expectedOut = outType.map(o => evalExpr(env, o, evalValues)).map {
           case TypedValue(TypeType, Some(tpe)) => tpe.asInstanceOf[Type]
           case other                           => error(s"Cannot decode type of ${other}")
         }
@@ -112,7 +121,7 @@ class TypeInterpreter extends BaseInterpreter[TypedValue] {
           case _                         => newEnv
         }
 
-        val actualOut = evalExpr(withRec, body)
+        val actualOut = evalExpr(withRec, body, evalValues)
         expectedOut.foreach { o => checkType(o, actualOut.tpe) }
 
         val resType = FuncType(inputTypes, expectedOut.getOrElse(actualOut.tpe))
@@ -120,7 +129,7 @@ class TypeInterpreter extends BaseInterpreter[TypedValue] {
           val newEnv = args.zip(values).foldLeft(env.newScope) { case (curEnv, (arg, value)) =>
             curEnv.put(arg.name, Strict(value))
           }
-          evalExpr(newEnv, body)
+          evalExpr(newEnv, body, evalValues)
         })
         TypedValue(resType, Some(resValue))
 
@@ -130,9 +139,9 @@ class TypeInterpreter extends BaseInterpreter[TypedValue] {
     res
   }
 
-  override def evalStruct(env: MyEnvType, s: Ast.Struct, path: String): TypedValue = {
+  def evalStruct(env: MyEnvType, s: Ast.Struct, path: String): TypedValue = {
     val argTypes = s.args.map { a =>
-      evalExpr(env, a.tpe) match {
+      evalExpr(env, a.tpe, evalValues = false) match {
         case TypedValue(TypeType, Some(t: Type)) => t
         case other                               => error(s"cannot decode type $other")
       }
@@ -141,7 +150,7 @@ class TypeInterpreter extends BaseInterpreter[TypedValue] {
     TypedValue(TypeType, Some(resType))
   }
 
-  override def evalNamespace(env: MyEnvType, n: Ast.Namespace, path: String): TypedValue = {
+  def evalNamespace(env: MyEnvType, n: Ast.Namespace, path: String): TypedValue = {
     val newPath = if (path.isEmpty) n.name else path + "." + n.name
     val namespaceEnv = runAllTopLevel(env.newScope, n.children, newPath)
 
@@ -158,9 +167,47 @@ class TypeInterpreter extends BaseInterpreter[TypedValue] {
     TypedValue(resType, Some(value))
   }
 
-  override def unit: TypedValue = TypeInterpreter.StdEnv.unitType
+  def unit: TypedValue = TypeInterpreter.StdEnv.unitType
 
-  override def forceTopLevelEval: Boolean = true
+  def forceTopLevelEval: Boolean = true
+
+  def run(env: MyEnvType, stmt: Stmt, evalValues: Boolean): (MyEnvType, TypedValue) = {
+    stmt match {
+      case expr: Expr => (env, evalExpr(env, expr, evalValues))
+      case Ast.Val(name, expr) =>
+        val evaluated = evalExpr(env, expr, evalValues)
+        (env.put(name, Strict(evaluated)), unit)
+    }
+  }
+
+  def runAll(env: MyEnvType, stmts: List[Stmt], evalValues: Boolean): (MyEnvType, TypedValue) = {
+    stmts.foldLeft((env, unit)) { case ((curEnv, _), nextStmt) =>
+      run(curEnv, nextStmt, evalValues)
+    }
+  }
+
+  protected def runTopLevel(env: MyEnvType, stmt: TopLevelStmt, path: String): Unit = {
+    stmt match {
+      case d: Def       => env.set(d.name, Lazy(() => evalExpr(env, d.lambda, evalValues = true)))
+      case s: Struct    => env.set(s.name, Lazy(() => evalStruct(env, s, path)))
+      case n: Namespace => env.set(n.name, Lazy(() => evalNamespace(env, n, path)))
+
+    }
+  }
+
+  protected def runAllTopLevel(env: MyEnvType, stmts: List[TopLevelStmt], path: String): MyEnvType = {
+    val newEnv = stmts.map(_.name).foldLeft(env) { case (curEnv, nextName) => curEnv.put(nextName, Strict(null)) }
+    stmts.foreach(stmt => runTopLevel(newEnv, stmt, path))
+    if (forceTopLevelEval) {
+      stmts.foreach(s => newEnv.get(s.name).foreach(_.value))
+    }
+    newEnv
+  }
+
+  def runProgram(env: MyEnvType, p: Ast.Program): TypedValue = {
+    val nextEnv = runAllTopLevel(env, p.topLevelStmts, "")
+    runAll(nextEnv, p.stmts, evalValues = true)._2
+  }
 
 }
 
@@ -178,11 +225,20 @@ object TypeInterpreter {
   }
 
   private val stdEnv = {
+    def f2int(f: (Int, Int) => Int): Func = Func {
+      case TypedValue(IntType, Some(PrimitiveValue(a: Int))) ::
+          TypedValue(IntType, Some(PrimitiveValue(b: Int))) :: Nil =>
+        TypedValue(IntType, Some(PrimitiveValue(f(a, b))))
+    }
+
     val basicTypes: Map[String, TypedValue] = Map(
-      "+" -> TypedValue(FuncType(List(IntType, IntType), IntType), None),
-      "-" -> TypedValue(FuncType(List(IntType, IntType), IntType), None),
-      "*" -> TypedValue(FuncType(List(IntType, IntType), IntType), None),
-      "==" -> TypedValue(FuncType(List(AnyType, AnyType), BoolType), None),
+      "+" -> TypedValue(FuncType(List(IntType, IntType), IntType), Some(f2int((a, b) => a + b))),
+      "-" -> TypedValue(FuncType(List(IntType, IntType), IntType), Some(f2int((a, b) => a - b))),
+      "*" -> TypedValue(FuncType(List(IntType, IntType), IntType), Some(f2int((a, b) => a * b))),
+      "==" -> TypedValue(
+        FuncType(List(AnyType, AnyType), BoolType),
+        Some(Func(args => TypedValue(BoolType, Some(PrimitiveValue(args(0) == args(1))))))
+      ),
       "Func" -> TypedValue(
         FuncType(List(TypeType), TypeType, isStar = true),
         Some(Func(args => {
@@ -212,6 +268,6 @@ object TypeInterpreter {
     interpreter.cache
   }
 
-  def typeStmts(p: Program): Type = new TypeInterpreter().runProgram(stdEnv, p).tpe
+  def typeStmts(p: Program): TypedValue = new TypeInterpreter().runProgram(stdEnv, p)
 
 }

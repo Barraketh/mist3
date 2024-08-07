@@ -2,17 +2,15 @@ package com.mistlang.lang
 
 object InterpreterTest extends App {
   def runProgram(p: Ast.Program): Any = {
-    TypeInterpreter.typeStmts(p)
-    EvaluatingInterpreter.run(p) match {
-      case InterpreterValue.PrimitiveValue(value) => value
-      case InterpreterValue.Dict(m)               => m
-      case InterpreterValue.Func(f)               => ???
-      case InterpreterValue.UnitValue             => "Unit"
-    }
+    val res = TypeInterpreter.typeStmts(p).value
+    res.map {
+      case ComptimeValue.PrimitiveValue(value) => value
+      case ComptimeValue.Dict(m)               => m
+    }.get
   }
 
   val runner = new RuntimeTestRunner(runProgram)
   runner.runTests()
-  //runner.runTest("tests/well_typed/namespaces.mist")
+  //runner.runTest("tests/well_typed/recursion.mist")
 
 }

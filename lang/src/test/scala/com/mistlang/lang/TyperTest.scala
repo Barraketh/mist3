@@ -10,7 +10,7 @@ object TyperTest extends App {
 
   def run(s: String): Type = {
     val e = FastparseParser.parse(s)
-    TypeInterpreter.typeStmts(e)
+    TypeInterpreter.typeStmts(e).tpe
   }
 
   def runTest(path: Path): Unit = {
