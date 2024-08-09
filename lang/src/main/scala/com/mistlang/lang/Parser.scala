@@ -3,13 +3,19 @@ package com.mistlang.lang
 import com.mistlang.lang.Ast._
 import fastparse._
 
-trait Parser {
-  def parse(s: String): Program
-}
+object FastparseParser {
+  def defaultIdProivder: () => Option[Int] = {
+    var id = 0
 
-object FastparseParser extends Parser {
-  override def parse(s: String): Program = {
-    val grammar = new Grammar
+    def nextId(): Option[Int] = {
+      id += 1
+      Some(id)
+    }
+    nextId
+  }
+
+  def parse(s: String, nextId: () => Option[Int] = defaultIdProivder): Program = {
+    val grammar = new Grammar(nextId)
     fastparse.parse(s, grammar.program(_)) match {
       case Parsed.Success(value, _) => value
       case f: Parsed.Failure =>
@@ -18,17 +24,22 @@ object FastparseParser extends Parser {
 
     }
   }
+
+  def parseExpr(s: String, nextId: () => Option[Int] = defaultIdProivder): Expr = {
+    val grammar = new Grammar(nextId)
+    fastparse.parse(s, grammar.fullExpr(_)) match {
+      case Parsed.Success(value, _) => value
+      case f: Parsed.Failure =>
+        val t = f.trace()
+        throw new RuntimeException(t.longAggregateMsg)
+    }
+  }
+
 }
 
-class Grammar {
+class Grammar(nextId: () => Option[Int]) {
   import Grammar._
   import SingleLineWhitespace._
-
-  var id = 0
-  def nextId(): Int = {
-    id += 1
-    id
-  }
 
   def str[_: P] = P("\"" ~~/ CharsWhile(_ != '"', 0).! ~~ "\"").map(s => Literal(nextId(), s))
 
@@ -36,7 +47,7 @@ class Grammar {
 
   def bool[_: P] = P("true" | "false").!.map(s => Literal(nextId(), s.toBoolean))
 
-  def alphaName[_: P] = P(CharIn("a-zA-Z_") ~~ CharsWhileIn("a-zA-Z0-9_", 0)).!.filter(s => !keyWords.contains(s))
+  def alphaName[_: P] = P(CharIn("a-zA-Z_$") ~~ CharsWhileIn("a-zA-Z0-9_$", 0)).!.filter(s => !keyWords.contains(s))
 
   def symbol[_: P] = P(CharsWhile(c => symbolChars.contains(c), 1)).!.filter(s => !keySymbols.contains(s))
 
@@ -52,21 +63,27 @@ class Grammar {
     case (cond, succ, fail) => If(nextId(), cond, succ, fail)
   }
 
-  def funcApply[_: P]: P[Trailer] =
-    P("(" ~/ ("\n".rep ~ expr ~ "\n".rep).rep(0, ",") ~ ")").map(args => FuncApply(args.toList))
+  def applyArgs[_: P]: P[List[Expr]] = P("(" ~/ ("\n".rep ~ expr ~ "\n".rep).rep(0, ",") ~ ")").map(_.toList)
+
+  def funcApply[_: P]: P[Trailer] = applyArgs.map(args => FuncApply(args))
 
   def memberRef[_: P]: P[TypeTrailer] = P("." ~/ name).map(n => MemberRefTrailer(n))
+
+  def methodCall[_: P]: P[TypeTrailer] = P("::" ~/ name ~/ applyArgs).map { case (name, args) =>
+    MethodCall(name, args)
+  }
 
   def infixCall[_: P]: P[Trailer] = P(symbol ~/ expr).map { case (s, e) =>
     InfixCall(s, e)
   }
 
-  def trailer[_: P]: P[Trailer] = P(memberRef | funcApply | infixCall)
+  def trailer[_: P]: P[Trailer] = P(memberRef | methodCall | funcApply | infixCall)
 
   def expr[_: P]: P[Expr] = P(term ~ trailer.rep).map { case (e, items) =>
     items.foldLeft(e)((curExpr, tralier) =>
       tralier match {
         case MemberRefTrailer(name) => Ast.MemberRef(nextId(), curExpr, name)
+        case MethodCall(name, args) => Call(nextId(), Ast.MethodRef(nextId(), curExpr, name), curExpr :: args)
         case FuncApply(args)        => Call(nextId(), curExpr, args)
         case InfixCall(op, arg) =>
           arg match {
@@ -106,14 +123,19 @@ class Grammar {
 
   def valP[_: P] = P("val " ~/ name ~ "=" ~ expr).map { case (n, e) => Val(n, e) }
   def defP[_: P] = P("def " ~/ name ~ argDeclList ~/ (":" ~ typeExpr) ~/ ("=" ~ expr)).map {
-    case (name, args, outputType, body) => Def(Lambda(nextId(), Some(name), args, Some(outputType), body))
+    case (name, args, outputType, body) => List(Def(Lambda(nextId(), Some(name), args, Some(outputType), body)))
   }
 
   def topLevelBlock[_: P]: P[List[TopLevelStmt]] = P("{") ~ topLevelStmts ~ "}"
 
-  def struct[_: P] = P("struct" ~/ name ~ typeArgList.? ~ argDeclList ~ topLevelBlock.?).map {
+  def struct[_: P]: P[List[TopLevelStmt]] = P("struct" ~/ name ~ typeArgList.? ~ argDeclList ~ topLevelBlock.?).map {
     case (name, typeArgs, args, stmts) =>
-      Struct(name, typeArgs.getOrElse(Nil), args, stmts.getOrElse(Nil))
+      val structDecl = Struct(name, typeArgs.getOrElse(Nil), args)
+      val namespaceDecl = stmts match {
+        case Some(value) => Namespace(name + "$", value) :: Nil
+        case None        => Nil
+      }
+      structDecl :: namespaceDecl
   }
 
   def argDecl[_: P] = P(name ~/ ":" ~ typeExpr).map(ArgDecl.tupled)
@@ -128,13 +150,14 @@ class Grammar {
 
   def stmts[_: P] = P("\n".rep ~ stmt.rep(0, "\n".rep(1)) ~ "\n".rep).map(_.toList)
 
-  def namespace[_: P] = (P("namespace") ~/ name ~ "{" ~ topLevelStmts ~ "}").map(Namespace.tupled)
+  def namespace[_: P] = (P("namespace") ~/ name ~ "{" ~ topLevelStmts ~ "}").map(Namespace.tupled).map(n => List(n))
 
-  def topLevelStmt[_: P] = namespace | struct | defP
+  def topLevelStmt[_: P]: P[List[TopLevelStmt]] = namespace | struct | defP
 
   def topLevelStmts[_: P]: P[List[TopLevelStmt]] =
-    P("\n".rep ~ topLevelStmt.rep(0, "\n".rep(1)) ~ "\n".rep).map(_.toList)
+    P("\n".rep ~ topLevelStmt.rep(0, "\n".rep(1)) ~ "\n".rep).map(_.toList.flatten)
 
+  def fullExpr[_: P]: P[Expr] = P(expr ~ End)
   def program[_: P]: P[Program] = P(topLevelStmts ~ stmts ~ End).map(Program.tupled)
 }
 
@@ -143,6 +166,7 @@ object Grammar {
   sealed trait TypeTrailer extends Trailer
   case class TypeApply(args: List[Expr]) extends TypeTrailer
   case class MemberRefTrailer(memberName: String) extends TypeTrailer
+  case class MethodCall(methodName: String, args: List[Expr]) extends TypeTrailer
 
   case class FuncApply(args: List[Expr]) extends Trailer
 

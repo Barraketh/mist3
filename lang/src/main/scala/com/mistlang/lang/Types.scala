@@ -28,7 +28,7 @@ object Types {
   case object UnitType extends Type
   case object NullType extends Type
   case object TypeType extends Type
-  case class FuncType(args: List[Type], out: Type, isStar: Boolean = false) extends Type
+  case class FuncType(args: List[Type], out: Type, fullName: String, isStar: Boolean = false) extends Type
   case class StructType(name: String, namespace: String, args: List[(String, Type)]) extends Type
   case class NamespaceType(children: Map[String, Type]) extends Type
 }

@@ -1,11 +1,11 @@
 package com.mistlang.interpreter
 
-case class Env[T](map: Map[String, EnvValue[T]], parent: Option[Env[T]]) {
+case class Env[T](namespace: String, map: Map[String, EnvValue[T]], parent: Option[Env[T]]) {
   def put(name: String, value: T): Env[T] = {
     if (map.contains(name)) throw new RuntimeException(s"$name already defined")
 
     val toPut = EnvValue(value)
-    Env(map + (name -> toPut), parent)
+    Env(namespace, map + (name -> toPut), parent)
   }
 
   def set(name: String, newValue: T): Unit = {
@@ -19,14 +19,19 @@ case class Env[T](map: Map[String, EnvValue[T]], parent: Option[Env[T]]) {
 
   def get(name: String): Option[T] = getValue(name).map(_.value)
 
-  def newScope: Env[T] = new Env[T](Map.empty, Some(this))
+  def newScope: Env[T] = new Env[T](namespace, Map.empty, Some(this))
+
+  def namespaceScope(name: String): Env[T] = {
+    val newName = if (namespace.isEmpty) name else namespace + "." + name
+    new Env[T](newName, Map.empty, Some(this))
+  }
 }
 
 object Env {
-  def empty[T]: Env[T] = new Env(Map.empty, None)
+  def empty[T]: Env[T] = new Env("", Map.empty, None)
 
   def make[T](values: Map[String, T], parent: Option[Env[T]]): Env[T] = {
-    Env[T](values.map { case (key, v) => key -> EnvValue(v) }, parent)
+    Env[T]("", values.map { case (key, v) => key -> EnvValue(v) }, parent)
   }
 }
 
