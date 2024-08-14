@@ -57,7 +57,7 @@ class Grammar(nextId: () => Option[Int]) {
 
   def literal[_: P]: P[TypeExpr] = P(str | int | bool)
 
-  def term[_: P]: P[Expr] = P(literal | ifP | block | ident)
+  def term[_: P]: P[Expr] = P(literal | ifP | lambda | block | ident)
 
   def ifP[_: P]: P[Expr] = P("if" ~/ "(" ~ expr ~ ")" ~ "\n".? ~ expr ~ "\n".? ~ "else" ~ "\n".? ~ expr).map {
     case (cond, succ, fail) => If(nextId(), cond, succ, fail)
@@ -122,6 +122,10 @@ class Grammar(nextId: () => Option[Int]) {
   }
 
   def valP[_: P] = P("val " ~/ name ~ "=" ~ expr).map { case (n, e) => Val(n, e) }
+
+  def lambda[_: P] = (P("fn ") ~/ argDeclList ~ (":" ~ typeExpr).? ~/ ("=>" ~ expr)).map {
+    case (args, outputType, body) => Lambda(nextId(), None, args, outputType, body)
+  }
   def defP[_: P] = P("def " ~/ name ~ argDeclList ~/ (":" ~ typeExpr) ~/ ("=" ~ expr)).map {
     case (name, args, outputType, body) => List(Def(Lambda(nextId(), Some(name), args, Some(outputType), body)))
   }

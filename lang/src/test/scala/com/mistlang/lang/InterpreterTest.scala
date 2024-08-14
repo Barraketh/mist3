@@ -4,8 +4,8 @@ object InterpreterTest extends App {
   def runProgram(p: Ast.Program): Any = {
     val res = TypeInterpreter.typeStmts(p).value
     res.map {
-      case ComptimeValue.PrimitiveValue(value) => value
-      case ComptimeValue.Dict(m)               => m
+      case ComptimeValue.SimpleValue(value) => value
+      case ComptimeValue.Dict(m)            => m
     }.get
   }
 

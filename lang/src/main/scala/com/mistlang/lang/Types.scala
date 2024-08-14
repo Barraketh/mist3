@@ -13,9 +13,10 @@ object InterpreterValue {
 sealed trait ComptimeValue
 
 object ComptimeValue {
-  case class PrimitiveValue(value: Any) extends ComptimeValue
+  case class SimpleValue(value: Any) extends ComptimeValue
   case class Dict(m: Map[String, ComptimeValue]) extends ComptimeValue
   case class Func(f: List[TypedValue] => TypedValue) extends ComptimeValue
+  case object UnitValue extends ComptimeValue
 }
 
 sealed trait Type extends ComptimeValue
@@ -28,6 +29,7 @@ object Types {
   case object UnitType extends Type
   case object NullType extends Type
   case object TypeType extends Type
+  case class ArrayType(underlying: Type) extends Type
   case class FuncType(args: List[Type], out: Type, fullName: String, isStar: Boolean = false) extends Type
   case class StructType(name: String, namespace: String, args: List[(String, Type)]) extends Type
   case class NamespaceType(children: Map[String, Type]) extends Type

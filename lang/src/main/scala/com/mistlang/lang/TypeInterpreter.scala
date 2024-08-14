@@ -21,13 +21,19 @@ class TypeInterpreter {
     }
   }
 
+  private def getStructFunc(env: MyEnvType, s: StructType, funcName: String): TypedValue = {
+    val fullStructName = if (s.namespace.isEmpty) s.name else s.namespace + "." + s.name
+    val fullMethodName = fullStructName + "$." + funcName
+    evalExpr(env, FastparseParser.parseExpr(fullMethodName, () => None), evalValues = false)
+  }
+
   def evalExpr(env: MyEnvType, expr: Ast.Expr, evalValues: Boolean): TypedValue = {
     val res: TypedValue = expr match {
       case Ast.Literal(_, value) =>
         value match {
-          case s: String  => TypedValue(StrType, Some(PrimitiveValue(s)))
-          case i: Int     => TypedValue(IntType, Some(PrimitiveValue(i)))
-          case b: Boolean => TypedValue(BoolType, Some(PrimitiveValue(b)))
+          case s: String  => TypedValue(StrType, Some(SimpleValue(s)))
+          case i: Int     => TypedValue(IntType, Some(SimpleValue(i)))
+          case b: Boolean => TypedValue(BoolType, Some(SimpleValue(b)))
         }
       case Ast.Ident(_, name) =>
         env
@@ -73,34 +79,28 @@ class TypeInterpreter {
       case Ast.MethodRef(_, expr, methodName) =>
         val typedObj = evalExpr(env, expr, evalValues)
         typedObj.tpe match {
-          case StructType(structName, namespace, _) =>
-            val fullStructName = if (namespace.isEmpty) structName else namespace + "." + structName
-            val fullMethodName = fullStructName + "$." + methodName
-            val res = evalExpr(env, FastparseParser.parseExpr(fullMethodName, () => None), evalValues = false)
-            res
-          case other => error(s"Cannot call method of $other")
+          case s: StructType => getStructFunc(env, s, methodName)
+          case other         => error(s"Cannot call method of $other")
         }
 
       case Ast.MemberRef(_, expr, memberName) =>
         val ref = evalExpr(env, expr, evalValues)
-        val resType = ref.tpe match {
-          case s: StructType =>
-            s.args.find(_._1 == memberName).getOrElse(error(s"Member name ${memberName} not found"))._2
-          case n: NamespaceType =>
-            n.children.find(_._1 == memberName).getOrElse(error(s"Member name ${memberName} not found"))._2
-          case other =>
-            throw error(s"Can not get member of ${other}")
+
+        ref match {
+          case TypedValue(s: StructType, value: Option[Dict]) =>
+            val tpe = s.args.find(_._1 == memberName).getOrElse(error(s"Member name ${memberName} not found"))._2
+            TypedValue(tpe, value.map(_.m(memberName)))
+          case TypedValue(n: NamespaceType, value: Option[Dict]) =>
+            val tpe = n.children.find(_._1 == memberName).getOrElse(error(s"Member name ${memberName} not found"))._2
+            TypedValue(tpe, value.map(_.m(memberName)))
+          case TypedValue(TypeType, Some(s: StructType)) => getStructFunc(env, s, memberName)
         }
-        val value = ref.value.map { v =>
-          v.asInstanceOf[Dict].m(memberName)
-        }
-        TypedValue(resType, value)
       case Ast.If(_, expr, success, fail) =>
         val cond = evalExpr(env, expr, evalValues)
         if (cond.tpe != BoolType) error("Condition must be boolean")
 
         val (evalSuccessValue, evalFailValue) = cond.value match {
-          case Some(PrimitiveValue(condValue: Boolean)) if evalValues =>
+          case Some(SimpleValue(condValue: Boolean)) if evalValues =>
             if (condValue) (true, false)
             else (false, true)
           case _ => (false, false)
@@ -111,7 +111,7 @@ class TypeInterpreter {
 
         val resType = if (typedSucc.tpe == typedFail.tpe) typedSucc.tpe else AnyType
         val value = cond.value.flatMap { c =>
-          if (c.asInstanceOf[PrimitiveValue].value.asInstanceOf[Boolean]) typedSucc.value
+          if (c.asInstanceOf[SimpleValue].value.asInstanceOf[Boolean]) typedSucc.value
           else typedFail.value
         }
         TypedValue(resType, value)
@@ -166,7 +166,8 @@ class TypeInterpreter {
 
   def evalStruct(env: MyEnvType, s: Ast.Struct): TypedValue = {
     val argTypes = s.args.map { a =>
-      evalExpr(env, a.tpe, evalValues = false) match {
+      val aTyped = evalExpr(env, a.tpe, evalValues = true)
+      aTyped match {
         case TypedValue(TypeType, Some(t: Type)) => t
         case other                               => error(s"cannot decode type $other")
       }
@@ -191,7 +192,7 @@ class TypeInterpreter {
     TypedValue(resType, Some(value))
   }
 
-  def unit: TypedValue = TypeInterpreter.StdEnv.unitType
+  val unit: TypedValue = TypedValue(UnitType, Some(UnitValue))
 
   def forceTopLevelEval: Boolean = true
 
@@ -249,19 +250,30 @@ object TypeInterpreter {
   }
 
   private val stdEnv = {
-    def f2int(f: (Int, Int) => Int): Func = Func {
-      case TypedValue(IntType, Some(PrimitiveValue(a: Int))) ::
-          TypedValue(IntType, Some(PrimitiveValue(b: Int))) :: Nil =>
-        TypedValue(IntType, Some(PrimitiveValue(f(a, b))))
+    def f2Int(name: String, outType: Type, f: (Int, Int) => Any): TypedValue = {
+      val func = Func {
+        case TypedValue(IntType, Some(SimpleValue(a: Int))) ::
+            TypedValue(IntType, Some(SimpleValue(b: Int))) :: Nil =>
+          TypedValue(outType, Some(SimpleValue(f(a, b))))
+      }
+      val tpe = FuncType(List(IntType, IntType), outType, name)
+      TypedValue(tpe, Some(func))
+    }
+
+    def mkFunc(name: String, argTypes: List[Type], outType: Type, f: List[ComptimeValue] => ComptimeValue) = {
+      val tpe = FuncType(argTypes, outType, name)
+      val func = Func(args => TypedValue(outType, Some(f(args.map(_.value.get)))))
+      TypedValue(tpe, Some(func))
     }
 
     val basicTypes: Map[String, TypedValue] = Map(
-      "+" -> TypedValue(FuncType(List(IntType, IntType), IntType, "+"), Some(f2int((a, b) => a + b))),
-      "-" -> TypedValue(FuncType(List(IntType, IntType), IntType, "-"), Some(f2int((a, b) => a - b))),
-      "*" -> TypedValue(FuncType(List(IntType, IntType), IntType, "*"), Some(f2int((a, b) => a * b))),
+      "+" -> f2Int("+", IntType, (a, b) => a + b),
+      "-" -> f2Int("-", IntType, (a, b) => a - b),
+      "*" -> f2Int("*", IntType, (a, b) => a * b),
+      "<" -> f2Int("<", BoolType, (a, b) => a < b),
       "==" -> TypedValue(
         FuncType(List(AnyType, AnyType), BoolType, "=="),
-        Some(Func(args => TypedValue(BoolType, Some(PrimitiveValue(args(0) == args(1))))))
+        Some(Func(args => TypedValue(BoolType, Some(SimpleValue(args(0) == args(1))))))
       ),
       "Func" -> TypedValue(
         FuncType(List(TypeType), TypeType, "Func", isStar = true),
@@ -272,6 +284,33 @@ object TypeInterpreter {
           }
           TypedValue(TypeType, Some(FuncType(tpes.take(tpes.length - 1), tpes.last, "")))
         }))
+      ),
+      "intArrayMake" -> mkFunc(
+        "intArrayMake",
+        List(IntType),
+        ArrayType(IntType),
+        { case SimpleValue(a: Int) :: Nil => SimpleValue(new Array[Int](a)) }
+      ),
+      "intArrayGet" -> mkFunc(
+        "intArrayGet",
+        List(ArrayType(IntType), IntType),
+        IntType,
+        { case SimpleValue(arr: Array[Int]) :: SimpleValue(i: Int) :: Nil => SimpleValue(arr(i)) }
+      ),
+      "intArraySet" -> mkFunc(
+        "intArraySet",
+        List(ArrayType(IntType), IntType, IntType),
+        UnitType,
+        { case SimpleValue(arr: Array[Int]) :: SimpleValue(i: Int) :: SimpleValue(value: Int) :: Nil =>
+          arr(i) = value
+          UnitValue
+        }
+      ),
+      "intArrayPrint" -> mkFunc(
+        "intArrayPrint",
+        List(ArrayType(IntType)),
+        StrType,
+        { case SimpleValue(arr: Array[Int]) :: Nil => SimpleValue(arr.toList.toString()) }
       ),
       "Unit" -> StdEnv.unitType,
       "Any" -> StdEnv.anyType,
