@@ -67,6 +67,7 @@ object JavaCompiler {
       case BoolType                  => "Boolean"
       case UnitType                  => "Unit"
       case AnyType                   => "Object"
+      case ArrayType(underlying)     => compileType(underlying) + "[]"
       case StructType(name, path, _) => if (path.isEmpty) name else s"$path.$name"
       case f: FuncType               => compileFunctionType(f)
     }
@@ -80,8 +81,8 @@ object JavaCompiler {
     s"Function${argTypes.length}<${genericParams.mkString(", ")}>"
   }
 
-  def compileDef(d: Ast.Def, types: TypeInterpreter.TypeCache): JavaAst.Def = {
-    val compiledStmts = d.lambda.body match {
+  def compileLambda(l: Ast.Lambda, types: TypeInterpreter.TypeCache): JavaAst.Lambda = {
+    val compiledStmts = l.body match {
       case b: Ast.Block => compileStmts(b.stmts, types, NameTracker.empty)._1
       case other        => compileExpr(other, types, NameTracker.empty)._1.asStmts
     }
@@ -89,14 +90,18 @@ object JavaCompiler {
       case Some(expr: JavaAst.Expr) => compiledStmts.take(compiledStmts.length - 1) ::: JavaAst.Return(expr) :: Nil
       case _                        => compiledStmts ::: JavaAst.Return(unitInstance) :: Nil
     }
-    val funcType = types(d.lambda.id.get).tpe.asInstanceOf[FuncType]
-    JavaAst.Def(
+    val funcType = types(l.id.get).tpe.asInstanceOf[FuncType]
+    JavaAst.Lambda(
       compileType(funcType),
-      d.name,
-      d.lambda.args.zipWithIndex.map { case (arg, idx) => JavaAst.Arg(arg.name, compileType(funcType.args(idx))) },
+      l.args.zipWithIndex.map { case (arg, idx) => JavaAst.Arg(arg.name, compileType(funcType.args(idx))) },
       compileType(funcType.out),
       body
     )
+  }
+
+  def compileDef(d: Ast.Def, types: TypeInterpreter.TypeCache): JavaAst.Def = {
+    val lambda = compileLambda(d.lambda, types)
+    JavaAst.Def(d.name, lambda)
   }
 
   def compileStruct(s: Ast.Struct, types: lang.TypeInterpreter.TypeCache): JavaAst.Struct = {
@@ -119,29 +124,27 @@ object JavaCompiler {
           case b: Boolean => (ce(JavaAst.BoolLiteral(b)), nameTracker)
         }
       case Ast.Ident(_, name) =>
-        val newName = name match {
-          case "+"  => "plusOp"
-          case "-"  => "minusOp"
-          case "*"  => "productOp"
-          case "==" => "eqIntOp"
-          case _ =>
-            nameTracker.renamed.get(name) match {
-              case Some(n) => n
-              case None    => name
-            }
+        val newName = nameTracker.renamed.get(name) match {
+          case Some(n) => n
+          case None    => name
         }
         (ce(JavaAst.Ident(newName)), nameTracker)
       case Ast.Call(_, expr, args, _) =>
-        val (compiled, newTracker) = compileExprs(expr :: args, types, nameTracker)
-        val stmts = compiled.flatMap(_.stmts)
-        val exprs = compiled.map(_.expr)
-        val calleeTpe = types(expr.id.get)
+        val (compiledArgs, newTracker) = compileExprs(args, types, nameTracker)
+        val stmts = compiledArgs.flatMap(_.stmts)
+        val exprs = compiledArgs.map(_.expr)
 
+        val calleeTpe = types(expr.id.get)
         calleeTpe match {
-          case TypedValue(_: FuncType, _) =>
-            (CompiledExpr(stmts, JavaAst.Call(exprs.head, exprs.tail)), newTracker)
+          case TypedValue(f: FuncType, _) =>
+            val (calleeExpr, newTracker2) = if (f.fullName.isEmpty) {
+              compileExpr(expr, types, newTracker)
+            } else {
+              (ce(JavaAst.Ident(f.fullName)), nameTracker)
+            }
+            (CompiledExpr(stmts, JavaAst.Call(calleeExpr.expr, exprs)), newTracker2)
           case TypedValue(TypeType, Some(s: StructType)) =>
-            (CompiledExpr(stmts, JavaAst.New(compileType(s), exprs.tail)), newTracker)
+            (CompiledExpr(stmts, JavaAst.New(compileType(s), exprs)), newTracker)
         }
 
       case i: Ast.If =>
@@ -191,6 +194,7 @@ object JavaCompiler {
         types(m.id.get) match {
           case TypedValue(f: FuncType, _) => (ce(JavaAst.Ident(f.fullName)), nameTracker)
         }
+      case l: Ast.Lambda => (ce(compileLambda(l, types)), nameTracker)
 
     }
   }

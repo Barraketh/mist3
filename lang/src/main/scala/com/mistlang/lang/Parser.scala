@@ -49,7 +49,14 @@ class Grammar(nextId: () => Option[Int]) {
 
   def alphaName[_: P] = P(CharIn("a-zA-Z_$") ~~ CharsWhileIn("a-zA-Z0-9_$", 0)).!.filter(s => !keyWords.contains(s))
 
-  def symbol[_: P] = P(CharsWhile(c => symbolChars.contains(c), 1)).!.filter(s => !keySymbols.contains(s))
+  def symbol[_: P] = P(CharsWhile(c => symbolChars.contains(c), 1)).!.filter(s => !keySymbols.contains(s)).map {
+    case "+"   => "plusOp"
+    case "-"   => "minusOp"
+    case "*"   => "productOp"
+    case "<"   => "smallerOp"
+    case "=="  => "eqIntOp"
+    case other => other
+  }
 
   def name[_: P] = P(alphaName | symbol)
 
@@ -180,5 +187,5 @@ object Grammar {
   val keySymbols = List("=", "=>")
   val symbolChars = "+-*/|<>=@"
 
-  val precedenceMap = Map("+" -> 0, "-" -> 0, "*" -> 1, "/" -> 1)
+  val precedenceMap = Map("plusOp" -> 0, "minusOp" -> 0, "productOp" -> 1, "/" -> 1)
 }

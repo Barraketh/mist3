@@ -4,8 +4,7 @@ object JavaAst {
   case class Program(stmts: List[TopLevelStmt])
   sealed trait TopLevelStmt
   case class Arg(name: String, tpe: String)
-  case class Def(funcType: String, name: String, args: List[Arg], outType: String, body: List[Stmt])
-    extends TopLevelStmt
+  case class Def(name: String, lambda: Lambda) extends TopLevelStmt
   case class Struct(name: String, args: List[Arg]) extends TopLevelStmt
   case class Namespace(name: String, stmts: List[TopLevelStmt]) extends TopLevelStmt
 
@@ -26,4 +25,5 @@ object JavaAst {
   case class BoolLiteral(b: Boolean) extends Expr
   case class StrLiteral(s: String) extends Expr
   case class MemberRef(expr: Expr, memberName: String) extends Expr
+  case class Lambda(funcType: String, args: List[Arg], outType: String, body: List[Stmt]) extends Expr
 }

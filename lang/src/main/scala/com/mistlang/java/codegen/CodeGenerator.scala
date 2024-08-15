@@ -16,16 +16,23 @@ object CodeGenerator {
   private def compileIf(i: IfExpr): String =
     s"""((${compileExpr(i.expr)}) ? ${compileExpr(i.success)} : ${compileExpr(i.fail)})"""
 
-  private def compileFunc(func: Def): String = {
+  private def compileLambda(func: Lambda): String = {
     val body = compileStmts(func.body)
     val compiledArgs = func.args.map(a => s"${a.tpe} ${a.name}").mkString(", ")
 
-    s"""
-       |public static final ${func.funcType} ${func.name} = new ${func.funcType}() {
+    s"""new ${func.funcType}() {
        |  public ${func.outType} apply($compiledArgs) {
        |    $body
        |  }
-       |};
+       |}
+       |""".stripMargin
+  }
+
+  private def compileFunc(func: Def): String = {
+    val compiled = compileLambda(func.lambda)
+
+    s"""
+       |public static final ${func.lambda.funcType} ${func.name} = ${compiled};
        |""".stripMargin
   }
 
@@ -46,6 +53,7 @@ object CodeGenerator {
       case i: IfExpr      => compileIf(i)
       case m: MemberRef   => compileExpr(m.expr) + s".${m.memberName}"
       case n: New         => compileNew(n)
+      case l: Lambda      => compileLambda(l)
     }
   }
 

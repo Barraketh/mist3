@@ -267,12 +267,12 @@ object TypeInterpreter {
     }
 
     val basicTypes: Map[String, TypedValue] = Map(
-      "+" -> f2Int("+", IntType, (a, b) => a + b),
-      "-" -> f2Int("-", IntType, (a, b) => a - b),
-      "*" -> f2Int("*", IntType, (a, b) => a * b),
-      "<" -> f2Int("<", BoolType, (a, b) => a < b),
-      "==" -> TypedValue(
-        FuncType(List(AnyType, AnyType), BoolType, "=="),
+      "plusOp" -> f2Int("plusOp", IntType, (a, b) => a + b),
+      "minusOp" -> f2Int("minusOp", IntType, (a, b) => a - b),
+      "productOp" -> f2Int("productOp", IntType, (a, b) => a * b),
+      "smallerOp" -> f2Int("smallerOp", BoolType, (a, b) => a < b),
+      "eqIntOp" -> TypedValue(
+        FuncType(List(AnyType, AnyType), BoolType, "eqIntOp"),
         Some(Func(args => TypedValue(BoolType, Some(SimpleValue(args(0) == args(1))))))
       ),
       "Func" -> TypedValue(
