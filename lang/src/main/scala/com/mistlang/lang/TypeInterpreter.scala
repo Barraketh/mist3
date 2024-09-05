@@ -4,13 +4,14 @@ import com.mistlang.interpreter.RuntimeValue.{Lazy, Strict}
 import com.mistlang.interpreter.{Env, RuntimeValue}
 import com.mistlang.lang.Ast._
 import com.mistlang.lang.ComptimeValue._
+import com.mistlang.lang.TypeInterpreter.Ctx
 import com.mistlang.lang.Types._
 
 class TypeInterpreter {
   import TypeInterpreter.error
   type MyEnvType = Env[RuntimeValue[TypedValue]]
 
-  val cache = collection.mutable.Map[Int, TypedValue]()
+  val cache = collection.mutable.Map[(Int, Ctx), TypedValue]()
 
   private def checkType(expected: Type, actual: Type): Unit = {
     (expected, actual) match {
@@ -24,10 +25,10 @@ class TypeInterpreter {
   private def getStructFunc(env: MyEnvType, s: StructType, funcName: String): TypedValue = {
     val fullStructName = if (s.namespace.isEmpty) s.name else s.namespace + "." + s.name
     val fullMethodName = fullStructName + "$." + funcName
-    evalExpr(env, FastparseParser.parseExpr(fullMethodName, () => None), evalValues = false)
+    evalExpr(env, FastparseParser.parseExpr(fullMethodName, () => None), evalValues = false)(None)
   }
 
-  def evalExpr(env: MyEnvType, expr: Ast.Expr, evalValues: Boolean): TypedValue = {
+  def evalExpr(env: MyEnvType, expr: Ast.Expr, evalValues: Boolean)(implicit ctx: Ctx): TypedValue = {
     val res: TypedValue = expr match {
       case Ast.Literal(_, value) =>
         value match {
@@ -158,22 +159,51 @@ class TypeInterpreter {
       case Ast.Comptime(id, expr) => ???
     }
     expr.id.foreach { id =>
-      cache.put(id, res)
+      cache.put((id, ctx), res)
     }
 
     res
   }
 
   def evalStruct(env: MyEnvType, s: Ast.Struct): TypedValue = {
-    val argTypes = s.args.map { a =>
-      val aTyped = evalExpr(env, a.tpe, evalValues = true)
-      aTyped match {
-        case TypedValue(TypeType, Some(t: Type)) => t
-        case other                               => error(s"cannot decode type $other")
+
+    if (s.typeArgs.isEmpty) {
+      val argTypes = s.args.map { a =>
+        val aTyped = evalExpr(env, a.tpe, evalValues = true)(None)
+        aTyped match {
+          case TypedValue(TypeType, Some(t: Type)) => t
+          case other                               => error(s"cannot decode type $other")
+        }
       }
+      val resType = StructType(s.name, env.namespace, s.args.map(_.name).zip(argTypes))
+
+      TypedValue(TypeType, Some(resType))
+    } else {
+      TypedValue(
+        FuncType(s.typeArgs.map(_ => TypeType), TypeType, s.name),
+        Some(Func { args =>
+          args.foreach(t => checkType(t.tpe, TypeType))
+          val newEnv = args.zip(s.typeArgs).foldLeft(env.newScope) { case (env, t) =>
+            env.put(t._2.name, Strict(t._1))
+          }
+
+          val argTypes = s.args.map { a =>
+            val aTyped = evalExpr(newEnv, a.tpe, evalValues = true)(None)
+            aTyped match {
+              case TypedValue(TypeType, Some(t: Type)) => t
+              case other                               => error(s"cannot decode type $other")
+            }
+          }
+          val resType = StructType(
+            s.name + args.map(_.value.get.toString).mkString(""),
+            env.namespace,
+            s.args.map(_.name).zip(argTypes)
+          )
+
+          TypedValue(TypeType, Some(resType))
+        })
+      )
     }
-    val resType = StructType(s.name, env.namespace, s.args.map(_.name).zip(argTypes))
-    TypedValue(TypeType, Some(resType))
   }
 
   def evalNamespace(env: MyEnvType, n: Ast.Namespace): TypedValue = {
@@ -196,7 +226,7 @@ class TypeInterpreter {
 
   def forceTopLevelEval: Boolean = true
 
-  def run(env: MyEnvType, stmt: Stmt, evalValues: Boolean): (MyEnvType, TypedValue) = {
+  def run(env: MyEnvType, stmt: Stmt, evalValues: Boolean)(implicit ctx: Ctx): (MyEnvType, TypedValue) = {
     stmt match {
       case expr: Expr => (env, evalExpr(env, expr, evalValues))
       case Ast.Val(name, expr) =>
@@ -205,7 +235,7 @@ class TypeInterpreter {
     }
   }
 
-  def runAll(env: MyEnvType, stmts: List[Stmt], evalValues: Boolean): (MyEnvType, TypedValue) = {
+  def runAll(env: MyEnvType, stmts: List[Stmt], evalValues: Boolean)(implicit ctx: Ctx): (MyEnvType, TypedValue) = {
     stmts.foldLeft((env, unit)) { case ((curEnv, _), nextStmt) =>
       run(curEnv, nextStmt, evalValues)
     }
@@ -213,7 +243,7 @@ class TypeInterpreter {
 
   protected def runTopLevel(env: MyEnvType, stmt: TopLevelStmt): Unit = {
     stmt match {
-      case d: Def       => env.set(d.name, Lazy(() => evalExpr(env, d.lambda, evalValues = true)))
+      case d: Def       => env.set(d.name, Lazy(() => evalExpr(env, d.lambda, evalValues = true)(None)))
       case s: Struct    => env.set(s.name, Lazy(() => evalStruct(env, s)))
       case n: Namespace => env.set(n.name, Lazy(() => evalNamespace(env, n)))
 
@@ -231,14 +261,16 @@ class TypeInterpreter {
 
   def runProgram(env: MyEnvType, p: Ast.Program): TypedValue = {
     val nextEnv = runAllTopLevel(env, p.topLevelStmts)
-    runAll(nextEnv, p.stmts, evalValues = true)._2
+    runAll(nextEnv, p.stmts, evalValues = true)(None)._2
   }
 
 }
 
 object TypeInterpreter {
 
-  type TypeCache = collection.mutable.Map[Int, TypedValue]
+  type Ctx = Option[List[Type]]
+  type TypeCache = collection.mutable.Map[(Int, Ctx), TypedValue]
+
   case class TypeError(msg: String) extends RuntimeException(msg)
   def error(s: String) = throw TypeError(s)
 
@@ -246,6 +278,7 @@ object TypeInterpreter {
     val unitType = TypedValue(TypeType, Some(UnitType))
     val anyType = TypedValue(TypeType, Some(AnyType))
     val intType = TypedValue(TypeType, Some(IntType))
+    val boolType = TypedValue(TypeType, Some(BoolType))
     val stringType = TypedValue(TypeType, Some(StrType))
   }
 
@@ -312,13 +345,42 @@ object TypeInterpreter {
         StrType,
         { case SimpleValue(arr: Array[Int]) :: Nil => SimpleValue(arr.toList.toString()) }
       ),
+      "boolArrayMake" -> mkFunc(
+        "boolArrayMake",
+        List(IntType),
+        ArrayType(BoolType),
+        { case SimpleValue(a: Int) :: Nil => SimpleValue(new Array[Boolean](a)) }
+      ),
+      "boolArrayGet" -> mkFunc(
+        "boolArrayGet",
+        List(ArrayType(BoolType), IntType),
+        BoolType,
+        { case SimpleValue(arr: Array[Boolean]) :: SimpleValue(i: Int) :: Nil => SimpleValue(arr(i)) }
+      ),
+      "boolArraySet" -> mkFunc(
+        "boolArraySet",
+        List(ArrayType(BoolType), IntType, BoolType),
+        UnitType,
+        { case SimpleValue(arr: Array[Boolean]) :: SimpleValue(i: Int) :: SimpleValue(value: Boolean) :: Nil =>
+          arr(i) = value
+          UnitValue
+        }
+      ),
+      "boolArrayPrint" -> mkFunc(
+        "boolArrayPrint",
+        List(ArrayType(BoolType)),
+        StrType,
+        { case SimpleValue(arr: Array[Boolean]) :: Nil => SimpleValue(arr.toList.toString()) }
+      ),
       "Unit" -> StdEnv.unitType,
       "Any" -> StdEnv.anyType,
       "Int" -> StdEnv.intType,
-      "String" -> StdEnv.stringType
-    ).map { case (key, value) =>
-      key -> value
-    }
+      "Bool" -> StdEnv.boolType,
+      "String" -> StdEnv.stringType,
+      "True" -> TypedValue(BoolType, Some(SimpleValue(true))),
+      "False" -> TypedValue(BoolType, Some(SimpleValue(false)))
+    )
+
     Env.make[RuntimeValue[TypedValue]](
       basicTypes.map { case (name, v) => name -> Strict(v) },
       None

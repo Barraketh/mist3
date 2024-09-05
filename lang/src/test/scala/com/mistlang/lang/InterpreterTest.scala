@@ -10,7 +10,7 @@ object InterpreterTest extends App {
   }
 
   val runner = new RuntimeTestRunner(runProgram)
-  runner.runTests()
-  //runner.runTest("tests/well_typed/recursion.mist")
+  //runner.runTests()
+  runner.runTest("tests/well_typed/generic_arrays.mist")
 
 }

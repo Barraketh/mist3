@@ -1,0 +1,38 @@
+"List(true, false)"
+
+struct Range(from: Int, to: Int) {
+  def foreachRec(f: Func[Int, Unit], max: Int, i: Int): Unit = {
+    if (i < max) {
+      f(i)
+      foreachRec(f, max, i + 1)
+    } else {}
+  }
+
+  def foreach(self: Range, f: Func[Int, Unit]): Unit = foreachRec(f, self.to, self.from)
+}
+
+struct ArrayOps[A: Type](get: Func[Int, A], set: Func[Int, A, Unit], print: Func[String], length: Int)
+
+namespace Arrays {
+  def makeIntArray(length: Int): ArrayOps[Int] = {
+    val arr = intArrayMake(length)
+    val get = fn (i: Int) => intArrayGet(arr, i)
+    val set = fn (i: Int, value: Int) => intArraySet(arr, i, value)
+    val print = fn () => intArrayPrint(arr)
+    ArrayOps[Int](get, set, print, length)
+  }
+
+  def makeBoolArray(length: Int): ArrayOps[Bool] = {
+    val arr = boolArrayMake(length)
+    val get = fn (i: Int) => boolArrayGet(arr, i)
+    val set = fn (i: Int, value: Bool) => boolArraySet(arr, i, value)
+    val print = fn () => boolArrayPrint(arr)
+    ArrayOps[Bool](get, set, print, length)
+  }
+
+}
+
+val arr = Arrays.makeBoolArray(2)
+arr.set(0, True)
+arr.set(1, False)
+arr.print()

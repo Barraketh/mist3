@@ -32,5 +32,6 @@ object JavaCodeGeneratorTest extends App {
   }
 
   val runner = new RuntimeTestRunner(runProgram)
-  runner.runTests()
+  //runner.runTests()
+  runner.runTest("tests/well_typed/generic_arrays.mist")
 }

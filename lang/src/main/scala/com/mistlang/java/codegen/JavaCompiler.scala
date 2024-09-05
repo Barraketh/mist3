@@ -1,6 +1,7 @@
 package com.mistlang.java.codegen
 
 import com.mistlang.lang
+import com.mistlang.lang.TypeInterpreter.Ctx
 import com.mistlang.lang.Types._
 import com.mistlang.lang.{Ast, Type, TypeInterpreter, TypedValue}
 
@@ -81,7 +82,7 @@ object JavaCompiler {
     s"Function${argTypes.length}<${genericParams.mkString(", ")}>"
   }
 
-  def compileLambda(l: Ast.Lambda, types: TypeInterpreter.TypeCache): JavaAst.Lambda = {
+  def compileLambda(l: Ast.Lambda, types: TypeInterpreter.TypeCache)(implicit ctx: Ctx): JavaAst.Lambda = {
     val compiledStmts = l.body match {
       case b: Ast.Block => compileStmts(b.stmts, types, NameTracker.empty)._1
       case other        => compileExpr(other, types, NameTracker.empty)._1.asStmts
@@ -90,7 +91,7 @@ object JavaCompiler {
       case Some(expr: JavaAst.Expr) => compiledStmts.take(compiledStmts.length - 1) ::: JavaAst.Return(expr) :: Nil
       case _                        => compiledStmts ::: JavaAst.Return(unitInstance) :: Nil
     }
-    val funcType = types(l.id.get).tpe.asInstanceOf[FuncType]
+    val funcType = types((l.id.get, ctx)).tpe.asInstanceOf[FuncType]
     JavaAst.Lambda(
       compileType(funcType),
       l.args.zipWithIndex.map { case (arg, idx) => JavaAst.Arg(arg.name, compileType(funcType.args(idx))) },

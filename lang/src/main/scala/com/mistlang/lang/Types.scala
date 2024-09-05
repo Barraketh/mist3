@@ -1,15 +1,5 @@
 package com.mistlang.lang
 
-sealed trait InterpreterValue
-
-object InterpreterValue {
-  case class PrimitiveValue(value: Any) extends InterpreterValue
-  case class Dict(m: Map[String, InterpreterValue]) extends InterpreterValue
-  case class Func(f: List[InterpreterValue] => InterpreterValue) extends InterpreterValue
-  case object UnitValue extends InterpreterValue
-
-}
-
 sealed trait ComptimeValue
 
 object ComptimeValue {

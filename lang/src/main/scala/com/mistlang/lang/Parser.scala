@@ -84,7 +84,7 @@ class Grammar(nextId: () => Option[Int]) {
     InfixCall(s, e)
   }
 
-  def trailer[_: P]: P[Trailer] = P(memberRef | methodCall | funcApply | infixCall)
+  def trailer[_: P]: P[Trailer] = P(memberRef | methodCall | funcApply | typeApply | infixCall)
 
   def expr[_: P]: P[Expr] = P(term ~ trailer.rep).map { case (e, items) =>
     items.foldLeft(e)((curExpr, tralier) =>
@@ -92,6 +92,7 @@ class Grammar(nextId: () => Option[Int]) {
         case MemberRefTrailer(name) => Ast.MemberRef(nextId(), curExpr, name)
         case MethodCall(name, args) => Call(nextId(), Ast.MethodRef(nextId(), curExpr, name), curExpr :: args)
         case FuncApply(args)        => Call(nextId(), curExpr, args)
+        case TypeApply(args)        => Call(nextId(), curExpr, args)
         case InfixCall(op, arg) =>
           arg match {
             case c @ Call(_, Ident(_, otherOp), otherArgs, true) if {
