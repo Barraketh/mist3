@@ -6,8 +6,6 @@ object JavaAst {
   case class Arg(name: String, tpe: String)
   case class Def(name: String, lambda: Lambda) extends TopLevelStmt
   case class Struct(name: String, args: List[Arg]) extends TopLevelStmt
-  case class Namespace(name: String, stmts: List[TopLevelStmt]) extends TopLevelStmt
-
   sealed trait Stmt
   case class Let(name: String, tpe: String, expr: Expr) extends Stmt
   case class Set(name: String, expr: Expr) extends Stmt

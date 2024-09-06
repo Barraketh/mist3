@@ -79,17 +79,9 @@ object CodeGenerator {
     case r: Return => s"return ${compileExpr(r.expr)};"
   }
 
-  private def compileNamespace(n: Namespace): String = {
-    s"""static class ${n.name} {
-       |  ${n.stmts.map(compileTopLevel).mkString("\n")}
-       |}
-       |""".stripMargin
-  }
-
   private def compileTopLevel(stmt: JavaAst.TopLevelStmt): String = stmt match {
     case s: JavaAst.Struct => compileStruct(s)
     case d: JavaAst.Def    => compileFunc(d)
-    case n: Namespace      => compileNamespace(n)
   }
 
   def compile(program: Program, pkg: List[String], className: String): String = {

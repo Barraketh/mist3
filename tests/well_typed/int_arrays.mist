@@ -1,6 +1,8 @@
 "List(4, 5)"
 
-struct Range(from: Int, to: Int) {
+struct Range(foreach: Func[Func[Int, Unit], Unit])
+
+namespace Range$ {
   def foreachRec(f: Func[Int, Unit], max: Int, i: Int): Unit = {
     if (i < max) {
       f(i)
@@ -8,10 +10,14 @@ struct Range(from: Int, to: Int) {
     } else {}
   }
 
-  def foreach(self: Range, f: Func[Int, Unit]): Unit = foreachRec(f, self.to, self.from)
+  def make(from: Int, to: Int): Range = {
+    val foreach = fn (f: Func[Int, Unit]) => foreachRec(f, to, from)
+    Range(foreach)
+  }
 }
 
-struct IntArrayOps(get: Func[Int, Int], set: Func[Int, Int, Unit], print: Func[String], length: Int) {
+struct IntArrayOps(get: Func[Int, Int], set: Func[Int, Int, Unit], print: Func[String], length: Int)
+namespace IntArrayOps$ {
   def make(length: Int): IntArrayOps = {
     val arr = intArrayMake(length)
     val get = fn (i: Int) => intArrayGet(arr, i)
@@ -22,14 +28,14 @@ struct IntArrayOps(get: Func[Int, Int], set: Func[Int, Int, Unit], print: Func[S
 
   def map(self: IntArrayOps, f: Func[Int, Int]): IntArrayOps = {
     val out = make(self.length)
-    Range(0, self.length)::foreach(fn (i: Int) => out.set(i, f(self.get(i))))
+    Range$.make(0, self.length).foreach(fn (i: Int) => out.set(i, f(self.get(i))))
     out
   }
 }
 
-val arr = IntArrayOps.make(2)
+val arr = IntArrayOps$.make(2)
 arr.set(0, 1)
 arr.set(1, 2)
 
-val arr2 = arr::map(fn (i: Int) => i + 3)
+val arr2 = IntArrayOps$.map(arr, fn (i: Int) => i + 3)
 arr2.print()

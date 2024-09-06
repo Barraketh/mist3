@@ -1,16 +1,5 @@
 "List(true, false)"
 
-struct Range(from: Int, to: Int) {
-  def foreachRec(f: Func[Int, Unit], max: Int, i: Int): Unit = {
-    if (i < max) {
-      f(i)
-      foreachRec(f, max, i + 1)
-    } else {}
-  }
-
-  def foreach(self: Range, f: Func[Int, Unit]): Unit = foreachRec(f, self.to, self.from)
-}
-
 struct ArrayOps[A: Type](get: Func[Int, A], set: Func[Int, A, Unit], print: Func[String], length: Int)
 
 namespace Arrays {

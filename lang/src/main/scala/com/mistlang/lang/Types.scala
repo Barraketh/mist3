@@ -21,8 +21,7 @@ object Types {
   case object TypeType extends Type
   case class ArrayType(underlying: Type) extends Type
   case class FuncType(args: List[Type], out: Type, fullName: String, isStar: Boolean = false) extends Type
-  case class StructType(name: String, namespace: String, args: List[(String, Type)]) extends Type
-  case class NamespaceType(children: Map[String, Type]) extends Type
+  case class StructType(name: String, args: List[(String, Type)]) extends Type
 }
 
 case class TypedValue(tpe: Type, value: Option[ComptimeValue])

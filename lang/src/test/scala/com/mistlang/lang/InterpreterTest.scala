@@ -2,7 +2,9 @@ package com.mistlang.lang
 
 object InterpreterTest extends App {
   def runProgram(p: Ast.Program): Any = {
-    val res = TypeInterpreter.typeStmts(p).value
+    val flatProgram = NamespaceResolver.resolveNames(p)
+
+    val res = TypeInterpreter.typeStmts(flatProgram).value
     res.map {
       case ComptimeValue.SimpleValue(value) => value
       case ComptimeValue.Dict(m)            => m
@@ -10,7 +12,7 @@ object InterpreterTest extends App {
   }
 
   val runner = new RuntimeTestRunner(runProgram)
-  //runner.runTests()
-  runner.runTest("tests/well_typed/generic_arrays.mist")
+  runner.runTests()
+  //runner.runTest("tests/well_typed/int_arrays.mist")
 
 }

@@ -4,14 +4,13 @@ import com.mistlang.interpreter.RuntimeValue.{Lazy, Strict}
 import com.mistlang.interpreter.{Env, RuntimeValue}
 import com.mistlang.lang.Ast._
 import com.mistlang.lang.ComptimeValue._
-import com.mistlang.lang.TypeInterpreter.Ctx
 import com.mistlang.lang.Types._
 
 class TypeInterpreter {
   import TypeInterpreter.error
   type MyEnvType = Env[RuntimeValue[TypedValue]]
 
-  val cache = collection.mutable.Map[(Int, Ctx), TypedValue]()
+  val cache = collection.mutable.Map[Int, TypedValue]()
 
   private def checkType(expected: Type, actual: Type): Unit = {
     (expected, actual) match {
@@ -22,13 +21,7 @@ class TypeInterpreter {
     }
   }
 
-  private def getStructFunc(env: MyEnvType, s: StructType, funcName: String): TypedValue = {
-    val fullStructName = if (s.namespace.isEmpty) s.name else s.namespace + "." + s.name
-    val fullMethodName = fullStructName + "$." + funcName
-    evalExpr(env, FastparseParser.parseExpr(fullMethodName, () => None), evalValues = false)(None)
-  }
-
-  def evalExpr(env: MyEnvType, expr: Ast.Expr, evalValues: Boolean)(implicit ctx: Ctx): TypedValue = {
+  private def evalExpr(env: MyEnvType, expr: Ast.Expr, evalValues: Boolean): TypedValue = {
     val res: TypedValue = expr match {
       case Ast.Literal(_, value) =>
         value match {
@@ -62,7 +55,7 @@ class TypeInterpreter {
               case _                                                                  => None
             }
             TypedValue(out, resValue.flatMap(_.value))
-          case TypedValue(TypeType, Some(resType @ StructType(_, _, expectedArgs))) =>
+          case TypedValue(TypeType, Some(resType @ StructType(_, expectedArgs))) =>
             if (expectedArgs.length != args.length)
               error(s"Wrong number of arguments: expected ${expectedArgs.length}, got ${args.length}")
 
@@ -77,12 +70,6 @@ class TypeInterpreter {
             TypedValue(resType, resValue)
           case _ => error(s"Cannot call $typedF")
         }
-      case Ast.MethodRef(_, expr, methodName) =>
-        val typedObj = evalExpr(env, expr, evalValues)
-        typedObj.tpe match {
-          case s: StructType => getStructFunc(env, s, methodName)
-          case other         => error(s"Cannot call method of $other")
-        }
 
       case Ast.MemberRef(_, expr, memberName) =>
         val ref = evalExpr(env, expr, evalValues)
@@ -91,10 +78,7 @@ class TypeInterpreter {
           case TypedValue(s: StructType, value: Option[Dict]) =>
             val tpe = s.args.find(_._1 == memberName).getOrElse(error(s"Member name ${memberName} not found"))._2
             TypedValue(tpe, value.map(_.m(memberName)))
-          case TypedValue(n: NamespaceType, value: Option[Dict]) =>
-            val tpe = n.children.find(_._1 == memberName).getOrElse(error(s"Member name ${memberName} not found"))._2
-            TypedValue(tpe, value.map(_.m(memberName)))
-          case TypedValue(TypeType, Some(s: StructType)) => getStructFunc(env, s, memberName)
+          case other => error(s"Cannot call member ref on $other")
         }
       case Ast.If(_, expr, success, fail) =>
         val cond = evalExpr(env, expr, evalValues)
@@ -118,12 +102,7 @@ class TypeInterpreter {
         TypedValue(resType, value)
       case Ast.Block(_, stmts) => runAll(env.newScope, stmts, evalValues)._2
       case Ast.Lambda(_, name, args, outType, body) =>
-        val funcName: String = name
-          .map { n =>
-            if (env.namespace.isEmpty) n
-            else env.namespace + "." + n
-          }
-          .getOrElse("")
+        val funcName: String = name.getOrElse("")
 
         val inputTypes = args.map { arg => evalExpr(env, arg.tpe, evalValues) }.map {
           case TypedValue(TypeType, Some(tpe)) => tpe.asInstanceOf[Type]
@@ -155,27 +134,23 @@ class TypeInterpreter {
           evalExpr(newEnv, body, evalValues)
         })
         TypedValue(resType, Some(resValue))
-
-      case Ast.Comptime(id, expr) => ???
     }
-    expr.id.foreach { id =>
-      cache.put((id, ctx), res)
-    }
+    cache.put(expr.id, res)
 
     res
   }
 
-  def evalStruct(env: MyEnvType, s: Ast.Struct): TypedValue = {
+  private def evalStruct(env: MyEnvType, s: Ast.Struct): TypedValue = {
 
     if (s.typeArgs.isEmpty) {
       val argTypes = s.args.map { a =>
-        val aTyped = evalExpr(env, a.tpe, evalValues = true)(None)
+        val aTyped = evalExpr(env, a.tpe, evalValues = true)
         aTyped match {
           case TypedValue(TypeType, Some(t: Type)) => t
           case other                               => error(s"cannot decode type $other")
         }
       }
-      val resType = StructType(s.name, env.namespace, s.args.map(_.name).zip(argTypes))
+      val resType = StructType(s.name, s.args.map(_.name).zip(argTypes))
 
       TypedValue(TypeType, Some(resType))
     } else {
@@ -188,7 +163,7 @@ class TypeInterpreter {
           }
 
           val argTypes = s.args.map { a =>
-            val aTyped = evalExpr(newEnv, a.tpe, evalValues = true)(None)
+            val aTyped = evalExpr(newEnv, a.tpe, evalValues = true)
             aTyped match {
               case TypedValue(TypeType, Some(t: Type)) => t
               case other                               => error(s"cannot decode type $other")
@@ -196,7 +171,6 @@ class TypeInterpreter {
           }
           val resType = StructType(
             s.name + args.map(_.value.get.toString).mkString(""),
-            env.namespace,
             s.args.map(_.name).zip(argTypes)
           )
 
@@ -206,27 +180,9 @@ class TypeInterpreter {
     }
   }
 
-  def evalNamespace(env: MyEnvType, n: Ast.Namespace): TypedValue = {
-    val namespaceEnv = runAllTopLevel(env.namespaceScope(n.name), n.children)
-
-    val names = n.children.map(_.name)
-    val resType = NamespaceType(names.map(name => name -> namespaceEnv.get(name).get.value.tpe).toMap)
-    val value = Dict(
-      names
-        .map(name => name -> namespaceEnv.get(name).get.value.value)
-        .collect { case (name, Some(value)) =>
-          name -> value
-        }
-        .toMap
-    )
-    TypedValue(resType, Some(value))
-  }
-
   val unit: TypedValue = TypedValue(UnitType, Some(UnitValue))
 
-  def forceTopLevelEval: Boolean = true
-
-  def run(env: MyEnvType, stmt: Stmt, evalValues: Boolean)(implicit ctx: Ctx): (MyEnvType, TypedValue) = {
+  private def run(env: MyEnvType, stmt: Stmt, evalValues: Boolean): (MyEnvType, TypedValue) = {
     stmt match {
       case expr: Expr => (env, evalExpr(env, expr, evalValues))
       case Ast.Val(name, expr) =>
@@ -235,42 +191,36 @@ class TypeInterpreter {
     }
   }
 
-  def runAll(env: MyEnvType, stmts: List[Stmt], evalValues: Boolean)(implicit ctx: Ctx): (MyEnvType, TypedValue) = {
+  private def runAll(env: MyEnvType, stmts: List[Stmt], evalValues: Boolean): (MyEnvType, TypedValue) = {
     stmts.foldLeft((env, unit)) { case ((curEnv, _), nextStmt) =>
       run(curEnv, nextStmt, evalValues)
     }
   }
 
-  protected def runTopLevel(env: MyEnvType, stmt: TopLevelStmt): Unit = {
+  private def runTopLevel(env: MyEnvType, stmt: FlatTopLevelStmt): Unit = {
     stmt match {
-      case d: Def       => env.set(d.name, Lazy(() => evalExpr(env, d.lambda, evalValues = true)(None)))
-      case s: Struct    => env.set(s.name, Lazy(() => evalStruct(env, s)))
-      case n: Namespace => env.set(n.name, Lazy(() => evalNamespace(env, n)))
-
+      case d: Def    => env.set(d.name, Lazy(() => evalExpr(env, d.lambda, evalValues = true)))
+      case s: Struct => env.set(s.name, Lazy(() => evalStruct(env, s)))
     }
   }
 
-  protected def runAllTopLevel(env: MyEnvType, stmts: List[TopLevelStmt]): MyEnvType = {
+  private def runAllTopLevel(env: MyEnvType, stmts: List[FlatTopLevelStmt]): MyEnvType = {
     val newEnv = stmts.map(_.name).foldLeft(env) { case (curEnv, nextName) => curEnv.put(nextName, Strict(null)) }
     stmts.foreach(stmt => runTopLevel(newEnv, stmt))
-    if (forceTopLevelEval) {
-      stmts.foreach(s => newEnv.get(s.name).foreach(_.value))
-    }
+    stmts.foreach(s => newEnv.get(s.name).foreach(_.value))
     newEnv
   }
 
-  def runProgram(env: MyEnvType, p: Ast.Program): TypedValue = {
+  def runProgram(env: MyEnvType, p: Ast.FlatProgram): TypedValue = {
     val nextEnv = runAllTopLevel(env, p.topLevelStmts)
-    runAll(nextEnv, p.stmts, evalValues = true)(None)._2
+    runAll(nextEnv, p.stmts, evalValues = true)._2
   }
 
 }
 
 object TypeInterpreter {
 
-  type Ctx = Option[List[Type]]
-  type TypeCache = collection.mutable.Map[(Int, Ctx), TypedValue]
-
+  type TypeCache = collection.mutable.Map[Int, TypedValue]
   case class TypeError(msg: String) extends RuntimeException(msg)
   def error(s: String) = throw TypeError(s)
 
@@ -387,12 +337,12 @@ object TypeInterpreter {
     )
   }
 
-  def typeAll(p: Program): TypeCache = {
+  def typeAll(p: FlatProgram): TypeCache = {
     val interpreter = new TypeInterpreter
     interpreter.runProgram(stdEnv, p)
     interpreter.cache
   }
 
-  def typeStmts(p: Program): TypedValue = new TypeInterpreter().runProgram(stdEnv, p)
+  def typeStmts(p: FlatProgram): TypedValue = new TypeInterpreter().runProgram(stdEnv, p)
 
 }

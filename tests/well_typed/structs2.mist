@@ -1,9 +1,0 @@
-7
-
-struct Foo(a: Int) {
-  def plus(self: Foo, other: Foo): Int = self.a + other.a
-}
-
-val foo = Foo(3)
-val bar = Foo(4)
-foo::plus(bar)
