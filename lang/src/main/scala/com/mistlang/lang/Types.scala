@@ -17,11 +17,10 @@ object Types {
   case object StrType extends Type
   case object BoolType extends Type
   case object UnitType extends Type
-  case object NullType extends Type
   case object TypeType extends Type
   case class ArrayType(underlying: Type) extends Type
-  case class FuncType(args: List[Type], out: Type, fullName: String, isStar: Boolean = false) extends Type
-  case class StructType(name: String, args: List[(String, Type)]) extends Type
+  case class FuncType(args: List[Type], out: Type, isStar: Boolean = false) extends Type
+  case class StructType(args: List[(String, Type)]) extends Type
 }
 
-case class TypedValue(tpe: Type, value: Option[ComptimeValue])
+case class TypedValue(tpe: Type, value: Option[ComptimeValue], name: Option[String] = None)

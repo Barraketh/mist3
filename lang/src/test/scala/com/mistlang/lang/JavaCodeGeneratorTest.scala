@@ -13,8 +13,9 @@ object JavaCodeGeneratorTest extends App {
   val compiler = ToolProvider.getSystemJavaCompiler
 
   def runProgram(p: Ast.Program): Any = {
+    val javaCompiler = new JavaCompiler
     val flatProgram = NamespaceResolver.resolveNames(p)
-    val c = gen.compile(JavaCompiler.compile(flatProgram), Nil, "MyClass")
+    val c = gen.compile(javaCompiler.compile(flatProgram), Nil, "MyClass")
 
     val writer = new BufferedWriter(new FileWriter(s"$scratchDir/MyClass.java"))
     writer.write(c)
@@ -33,6 +34,6 @@ object JavaCodeGeneratorTest extends App {
   }
 
   val runner = new RuntimeTestRunner(runProgram)
-  //runner.runTests()
-  runner.runTest("tests/well_typed/namespaces.mist")
+  runner.runTests()
+  //runner.runTest("tests/well_typed/namespaces.mist")
 }

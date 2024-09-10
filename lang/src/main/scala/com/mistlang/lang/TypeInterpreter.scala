@@ -37,7 +37,7 @@ class TypeInterpreter {
       case Ast.Call(_, func, args, _) =>
         val typedF = evalExpr(env, func, evalValues)
         typedF match {
-          case TypedValue(FuncType(funcArgs, out, _, isStar), value) =>
+          case TypedValue(FuncType(funcArgs, out, isStar), value, _) =>
             val expectedArgs = if (isStar) {
               funcArgs.take(funcArgs.length - 1) ++ List.fill(args.length - funcArgs.length + 1)(funcArgs.last)
             } else funcArgs
@@ -55,7 +55,7 @@ class TypeInterpreter {
               case _                                                                  => None
             }
             TypedValue(out, resValue.flatMap(_.value))
-          case TypedValue(TypeType, Some(resType @ StructType(_, expectedArgs))) =>
+          case TypedValue(TypeType, Some(resType @ StructType(expectedArgs)), _) =>
             if (expectedArgs.length != args.length)
               error(s"Wrong number of arguments: expected ${expectedArgs.length}, got ${args.length}")
 
@@ -75,7 +75,7 @@ class TypeInterpreter {
         val ref = evalExpr(env, expr, evalValues)
 
         ref match {
-          case TypedValue(s: StructType, value: Option[Dict]) =>
+          case TypedValue(s: StructType, value: Option[Dict], _) =>
             val tpe = s.args.find(_._1 == memberName).getOrElse(error(s"Member name ${memberName} not found"))._2
             TypedValue(tpe, value.map(_.m(memberName)))
           case other => error(s"Cannot call member ref on $other")
@@ -105,12 +105,12 @@ class TypeInterpreter {
         val funcName: String = name.getOrElse("")
 
         val inputTypes = args.map { arg => evalExpr(env, arg.tpe, evalValues) }.map {
-          case TypedValue(TypeType, Some(tpe)) => tpe.asInstanceOf[Type]
-          case other                           => error(s"Cannot decode type of ${other}")
+          case TypedValue(TypeType, Some(tpe), _) => tpe.asInstanceOf[Type]
+          case other                              => error(s"Cannot decode type of ${other}")
         }
         val expectedOut = outType.map(o => evalExpr(env, o, evalValues)).map {
-          case TypedValue(TypeType, Some(tpe)) => tpe.asInstanceOf[Type]
-          case other                           => error(s"Cannot decode type of ${other}")
+          case TypedValue(TypeType, Some(tpe), _) => tpe.asInstanceOf[Type]
+          case other                              => error(s"Cannot decode type of ${other}")
         }
 
         val newEnv = args.zip(inputTypes).foldLeft(env.newScope) { case (curEnv, nextArg) =>
@@ -119,14 +119,14 @@ class TypeInterpreter {
 
         val withRec = (name, expectedOut) match {
           case (Some(name), Some(value)) =>
-            newEnv.put(name, Strict(TypedValue(FuncType(inputTypes, value, funcName), None)))
+            newEnv.put(name, Strict(TypedValue(FuncType(inputTypes, value), None)))
           case _ => newEnv
         }
 
         val actualOut = evalExpr(withRec, body, evalValues)
         expectedOut.foreach { o => checkType(o, actualOut.tpe) }
 
-        val resType = FuncType(inputTypes, expectedOut.getOrElse(actualOut.tpe), funcName)
+        val resType = FuncType(inputTypes, expectedOut.getOrElse(actualOut.tpe))
         val resValue = Func((values: List[TypedValue]) => {
           val newEnv = args.zip(values).foldLeft(env.newScope) { case (curEnv, (arg, value)) =>
             curEnv.put(arg.name, Strict(value))
@@ -146,16 +146,16 @@ class TypeInterpreter {
       val argTypes = s.args.map { a =>
         val aTyped = evalExpr(env, a.tpe, evalValues = true)
         aTyped match {
-          case TypedValue(TypeType, Some(t: Type)) => t
-          case other                               => error(s"cannot decode type $other")
+          case TypedValue(TypeType, Some(t: Type), _) => t
+          case other                                  => error(s"cannot decode type $other")
         }
       }
-      val resType = StructType(s.name, s.args.map(_.name).zip(argTypes))
+      val resType = StructType(s.args.map(_.name).zip(argTypes))
 
       TypedValue(TypeType, Some(resType))
     } else {
       TypedValue(
-        FuncType(s.typeArgs.map(_ => TypeType), TypeType, s.name),
+        FuncType(s.typeArgs.map(_ => TypeType), TypeType),
         Some(Func { args =>
           args.foreach(t => checkType(t.tpe, TypeType))
           val newEnv = args.zip(s.typeArgs).foldLeft(env.newScope) { case (env, t) =>
@@ -165,14 +165,11 @@ class TypeInterpreter {
           val argTypes = s.args.map { a =>
             val aTyped = evalExpr(newEnv, a.tpe, evalValues = true)
             aTyped match {
-              case TypedValue(TypeType, Some(t: Type)) => t
-              case other                               => error(s"cannot decode type $other")
+              case TypedValue(TypeType, Some(t: Type), _) => t
+              case other                                  => error(s"cannot decode type $other")
             }
           }
-          val resType = StructType(
-            s.name + args.map(_.value.get.toString).mkString(""),
-            s.args.map(_.name).zip(argTypes)
-          )
+          val resType = StructType(s.args.map(_.name).zip(argTypes))
 
           TypedValue(TypeType, Some(resType))
         })
@@ -235,18 +232,18 @@ object TypeInterpreter {
   private val stdEnv = {
     def f2Int(name: String, outType: Type, f: (Int, Int) => Any): TypedValue = {
       val func = Func {
-        case TypedValue(IntType, Some(SimpleValue(a: Int))) ::
-            TypedValue(IntType, Some(SimpleValue(b: Int))) :: Nil =>
+        case TypedValue(IntType, Some(SimpleValue(a: Int)), _) ::
+            TypedValue(IntType, Some(SimpleValue(b: Int)), _) :: Nil =>
           TypedValue(outType, Some(SimpleValue(f(a, b))))
       }
-      val tpe = FuncType(List(IntType, IntType), outType, name)
-      TypedValue(tpe, Some(func))
+      val tpe = FuncType(List(IntType, IntType), outType)
+      TypedValue(tpe, Some(func), Some(name))
     }
 
     def mkFunc(name: String, argTypes: List[Type], outType: Type, f: List[ComptimeValue] => ComptimeValue) = {
-      val tpe = FuncType(argTypes, outType, name)
+      val tpe = FuncType(argTypes, outType)
       val func = Func(args => TypedValue(outType, Some(f(args.map(_.value.get)))))
-      TypedValue(tpe, Some(func))
+      TypedValue(tpe, Some(func), Some(name))
     }
 
     val basicTypes: Map[String, TypedValue] = Map(
@@ -255,17 +252,17 @@ object TypeInterpreter {
       "productOp" -> f2Int("productOp", IntType, (a, b) => a * b),
       "smallerOp" -> f2Int("smallerOp", BoolType, (a, b) => a < b),
       "eqIntOp" -> TypedValue(
-        FuncType(List(AnyType, AnyType), BoolType, "eqIntOp"),
+        FuncType(List(AnyType, AnyType), BoolType),
         Some(Func(args => TypedValue(BoolType, Some(SimpleValue(args(0) == args(1))))))
       ),
       "Func" -> TypedValue(
-        FuncType(List(TypeType), TypeType, "Func", isStar = true),
+        FuncType(List(TypeType), TypeType, isStar = true),
         Some(Func(args => {
           val tpes = args.map {
-            case TypedValue(TypeType, Some(tpe: Type)) => tpe
-            case other                                 => error(s"Could not decode type from $other")
+            case TypedValue(TypeType, Some(tpe: Type), _) => tpe
+            case other                                    => error(s"Could not decode type from $other")
           }
-          TypedValue(TypeType, Some(FuncType(tpes.take(tpes.length - 1), tpes.last, "")))
+          TypedValue(TypeType, Some(FuncType(tpes.take(tpes.length - 1), tpes.last)))
         }))
       ),
       "intArrayMake" -> mkFunc(
