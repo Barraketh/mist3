@@ -1,6 +1,7 @@
 package com.mistlang.java.codegen
 
 import com.mistlang.lang
+import com.mistlang.lang.TypeInterpreter.TypeError
 import com.mistlang.lang.Types._
 import com.mistlang.lang.{Ast, Type, TypeInterpreter, TypedValue}
 
@@ -23,7 +24,7 @@ class JavaCompiler {
   }
 
   private def compileStmts(
-      stmts: List[Ast.Stmt],
+      stmts: List[Ast.FnBodyStmt],
       types: TypeInterpreter.TypeCache,
       nameTracker: NameTracker
   ): (List[JavaAst.Stmt], NameTracker) = {
@@ -54,10 +55,12 @@ class JavaCompiler {
     s"Function${argTypes.length}<${genericParams.mkString(", ")}>"
   }
 
-  private def compileLambda(l: Ast.Lambda, types: TypeInterpreter.TypeCache): JavaAst.Lambda = {
+  private def compileLambda(l: Ast.Lambda, types: TypeInterpreter.TypeCache)(implicit
+      nameTracker: NameTracker
+  ): JavaAst.Lambda = {
     val compiledStmts = l.body match {
-      case b: Ast.Block => compileStmts(b.stmts, types, NameTracker.empty)._1
-      case other        => compileExpr(other, types, NameTracker.empty)._1.asStmts
+      case b: Ast.Block => compileStmts(b.stmts, types, nameTracker)._1
+      case other        => compileExpr(other, types, nameTracker)._1.asStmts
     }
     val body = compiledStmts.lastOption match {
       case Some(expr: JavaAst.Expr) => compiledStmts.take(compiledStmts.length - 1) ::: JavaAst.Return(expr) :: Nil
@@ -72,7 +75,9 @@ class JavaCompiler {
     )
   }
 
-  def compileDef(d: Ast.Def, types: TypeInterpreter.TypeCache): JavaAst.Def = {
+  def compileDef(d: Ast.Def, types: TypeInterpreter.TypeCache)(implicit
+      topLevelNameTracker: NameTracker
+  ): JavaAst.Def = {
     val lambda = compileLambda(d.lambda, types)
     JavaAst.Def(d.name, lambda)
   }
@@ -162,18 +167,18 @@ class JavaCompiler {
       case Ast.MemberRef(_, expr, memberName) =>
         val (compiled, nextTracker) = compileExpr(expr, types, nameTracker)
         (CompiledExpr(compiled.stmts, JavaAst.MemberRef(compiled.expr, memberName)), nextTracker)
-      case l: Ast.Lambda => (ce(compileLambda(l, types)), nameTracker)
+      case l: Ast.Lambda => (ce(compileLambda(l, types)(nameTracker)), nameTracker)
 
     }
   }
 
   private def compileStmt(
-      stmt: Ast.Stmt,
+      stmt: Ast.FnBodyStmt,
       types: TypeInterpreter.TypeCache,
       nameTracker: NameTracker
   ): (List[JavaAst.Stmt], NameTracker) =
     stmt match {
-      case Ast.Val(name, expr) =>
+      case Ast.Val(_, name, expr) =>
         val (newName, tracker1) = nameTracker.declareName(name)
         val (compiled, tracker2) = compileExpr(expr, types, tracker1)
         val finalTracker = if (name == newName) tracker2 else tracker2.rename(name, newName)
@@ -209,9 +214,23 @@ class JavaCompiler {
     allStructTypes.foreach { case (s, n) => structNameCache.put(s, n) }
 
     val javaStructs = allStructTypes.toList.map { case (st, name) => compileStruct(name, st) }
+    implicit val topLevelNameTracker: NameTracker = p2.topLevelStmts.map(_.name).foldLeft(NameTracker.empty) {
+      case (curTracker, nextName) => curTracker.declareName(nextName)._2
+    }
     val javaDefs = p2.topLevelStmts.collect { case d: Ast.Def => d }.map(d => compileDef(d, types))
 
-    JavaAst.Program(javaStructs ::: javaDefs)
+    val javaVals = p2.topLevelStmts
+      .collect { case v: Ast.Val => v }
+      .filter(v => !(types(v.expr.id).tpe == TypeType)) // We compiled structs separately above
+      .map { v =>
+        val compiled = compileExpr(v.expr, types, NameTracker.empty)._1
+        // TODO: This should be enforced upstream
+        if (compiled.stmts.nonEmpty) throw TypeError("This expr not allowed in top level stmts")
+
+        JavaAst.StaticLet(v.name, compileType(types(v.expr.id).tpe), compiled.expr)
+      }
+
+    JavaAst.Program(javaStructs ::: javaDefs ::: javaVals)
   }
 }
 

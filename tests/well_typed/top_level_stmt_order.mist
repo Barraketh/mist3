@@ -2,7 +2,7 @@
 
 def getBaz(foo: Foo): Int = foo.bar.baz
 
-struct Foo(a: String, bar: Bar)
-struct Bar(baz: Int)
+lazy Foo = Struct(a: String, bar: Bar)
+lazy Bar = Struct(baz: Int)
 
 getBaz(Foo("hi", Bar(3)))

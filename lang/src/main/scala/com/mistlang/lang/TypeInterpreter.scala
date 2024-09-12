@@ -102,8 +102,6 @@ class TypeInterpreter {
         TypedValue(resType, value)
       case Ast.Block(_, stmts) => runAll(env.newScope, stmts, evalValues)._2
       case Ast.Lambda(_, name, args, outType, body) =>
-        val funcName: String = name.getOrElse("")
-
         val inputTypes = args.map { arg => evalExpr(env, arg.tpe, evalValues) }.map {
           case TypedValue(TypeType, Some(tpe), _) => tpe.asInstanceOf[Type]
           case other                              => error(s"Cannot decode type of ${other}")
@@ -134,6 +132,7 @@ class TypeInterpreter {
           evalExpr(newEnv, body, evalValues)
         })
         TypedValue(resType, Some(resValue))
+      case s: Ast.Struct => evalStruct(env, s)
     }
     cache.put(expr.id, res)
 
@@ -141,54 +140,30 @@ class TypeInterpreter {
   }
 
   private def evalStruct(env: MyEnvType, s: Ast.Struct): TypedValue = {
-
-    if (s.typeArgs.isEmpty) {
-      val argTypes = s.args.map { a =>
-        val aTyped = evalExpr(env, a.tpe, evalValues = true)
-        aTyped match {
-          case TypedValue(TypeType, Some(t: Type), _) => t
-          case other                                  => error(s"cannot decode type $other")
-        }
+    val argTypes = s.args.map { a =>
+      val aTyped = evalExpr(env, a.tpe, evalValues = true)
+      aTyped match {
+        case TypedValue(TypeType, Some(t: Type), _) => t
+        case other                                  => error(s"cannot decode type $other")
       }
-      val resType = StructType(s.args.map(_.name).zip(argTypes))
-
-      TypedValue(TypeType, Some(resType))
-    } else {
-      TypedValue(
-        FuncType(s.typeArgs.map(_ => TypeType), TypeType),
-        Some(Func { args =>
-          args.foreach(t => checkType(t.tpe, TypeType))
-          val newEnv = args.zip(s.typeArgs).foldLeft(env.newScope) { case (env, t) =>
-            env.put(t._2.name, Strict(t._1))
-          }
-
-          val argTypes = s.args.map { a =>
-            val aTyped = evalExpr(newEnv, a.tpe, evalValues = true)
-            aTyped match {
-              case TypedValue(TypeType, Some(t: Type), _) => t
-              case other                                  => error(s"cannot decode type $other")
-            }
-          }
-          val resType = StructType(s.args.map(_.name).zip(argTypes))
-
-          TypedValue(TypeType, Some(resType))
-        })
-      )
     }
+    val resType = StructType(s.args.map(_.name).zip(argTypes))
+
+    TypedValue(TypeType, Some(resType))
   }
 
   val unit: TypedValue = TypedValue(UnitType, Some(UnitValue))
 
-  private def run(env: MyEnvType, stmt: Stmt, evalValues: Boolean): (MyEnvType, TypedValue) = {
+  private def run(env: MyEnvType, stmt: FnBodyStmt, evalValues: Boolean): (MyEnvType, TypedValue) = {
     stmt match {
       case expr: Expr => (env, evalExpr(env, expr, evalValues))
-      case Ast.Val(name, expr) =>
+      case Ast.Val(_, name, expr) =>
         val evaluated = evalExpr(env, expr, evalValues)
         (env.put(name, Strict(evaluated)), unit)
     }
   }
 
-  private def runAll(env: MyEnvType, stmts: List[Stmt], evalValues: Boolean): (MyEnvType, TypedValue) = {
+  private def runAll(env: MyEnvType, stmts: List[FnBodyStmt], evalValues: Boolean): (MyEnvType, TypedValue) = {
     stmts.foldLeft((env, unit)) { case ((curEnv, _), nextStmt) =>
       run(curEnv, nextStmt, evalValues)
     }
@@ -196,8 +171,8 @@ class TypeInterpreter {
 
   private def runTopLevel(env: MyEnvType, stmt: FlatTopLevelStmt): Unit = {
     stmt match {
-      case d: Def    => env.set(d.name, Lazy(() => evalExpr(env, d.lambda, evalValues = true)))
-      case s: Struct => env.set(s.name, Lazy(() => evalStruct(env, s)))
+      case d: Def => env.set(d.name, Lazy(() => evalExpr(env, d.lambda, evalValues = true)))
+      case v: Val => env.set(v.name, Lazy(() => evalExpr(env, v.expr, evalValues = true)))
     }
   }
 

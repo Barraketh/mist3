@@ -1,6 +1,6 @@
 6
 
-struct Foo(a: Int, b: String)
+lazy Foo = Struct(a: Int, b: String)
 
 def f(foo: Foo): Int = foo.a + 3
 

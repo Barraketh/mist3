@@ -53,7 +53,7 @@ class Grammar(nextId: () => Int) {
 
   def literal[_: P]: P[TypeExpr] = P(str | int | bool)
 
-  def term[_: P]: P[Expr] = P(literal | ifP | lambda | block | ident)
+  def term[_: P]: P[Expr] = P(literal | ifP | lambda | block | struct | ident)
 
   def ifP[_: P]: P[Expr] = P("if" ~/ "(" ~ expr ~ ")" ~ "\n".? ~ expr ~ "\n".? ~ "else" ~ "\n".? ~ expr).map {
     case (cond, succ, fail) => If(nextId(), cond, succ, fail)
@@ -113,7 +113,9 @@ class Grammar(nextId: () => Int) {
     }
   }
 
-  def valP[_: P] = P("val " ~/ name ~ "=" ~ expr).map { case (n, e) => Val(n, e) }
+  def valP[_: P] = P("val " ~/ name ~ "=" ~ expr).map { case (n, e) => Val(nextId(), n, e) }
+
+  def lazyP[_: P]: P[Val] = P("lazy " ~/ name ~ "=" ~ expr).map { case (n, e) => Val(nextId(), n, e) }
 
   def lambda[_: P] = (P("fn ") ~/ argDeclList ~ (":" ~ typeExpr).? ~/ ("=>" ~ expr)).map {
     case (args, outputType, body) => Lambda(nextId(), None, args, outputType, body)
@@ -122,11 +124,7 @@ class Grammar(nextId: () => Int) {
     case (name, args, outputType, body) => Def(Lambda(nextId(), Some(name), args, Some(outputType), body))
   }
 
-  def topLevelBlock[_: P]: P[List[TopLevelStmt]] = P("{") ~ topLevelStmts ~ "}"
-
-  def struct[_: P]: P[TopLevelStmt] = P("struct" ~/ name ~ typeArgList.? ~ argDeclList).map {
-    case (name, typeArgs, args) => Struct(nextId(), name, typeArgs.getOrElse(Nil), args)
-  }
+  def struct[_: P]: P[Expr] = P("Struct" ~/ argDeclList).map { args => Struct(nextId(), args) }
 
   def argDecl[_: P] = P(name ~/ ":" ~ typeExpr).map(ArgDecl.tupled)
 
@@ -142,7 +140,7 @@ class Grammar(nextId: () => Int) {
 
   def namespace[_: P] = (P("namespace") ~/ name ~ "{" ~ topLevelStmts ~ "}").map(Namespace.tupled)
 
-  def topLevelStmt[_: P]: P[TopLevelStmt] = namespace | struct | defP
+  def topLevelStmt[_: P]: P[TopLevelStmt] = namespace | defP | lazyP
 
   def topLevelStmts[_: P]: P[List[TopLevelStmt]] =
     P("\n".rep ~ topLevelStmt.rep(0, "\n".rep(1)) ~ "\n".rep).map(_.toList)

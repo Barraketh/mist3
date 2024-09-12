@@ -47,29 +47,33 @@ class NamespaceResolver {
         evalExpr(withRec, body)
         res
       case Ast.Block(_, stmts) => runAll(env.newScope, stmts)._2
+      case Ast.Struct(_, args) =>
+        args.map(_.tpe).foreach(e => evalExpr(env, e))
+        Local
+
     }
 
     cache.put(exp.id, res)
     res
   }
 
-  private def run(env: MyEnvType, stmt: Ast.Stmt)(implicit namespace: String): (MyEnvType, EnvValue) = {
+  private def run(env: MyEnvType, stmt: Ast.FnBodyStmt)(implicit namespace: String): (MyEnvType, EnvValue) = {
     stmt match {
       case expr: Ast.Expr => (env, evalExpr(env, expr))
-      case Ast.Val(name, expr) =>
+      case Ast.Val(id, name, expr) =>
         val evaluated = evalExpr(env, expr)
         (env.put(name, Strict(evaluated)), Local)
     }
   }
 
-  private def runAll(env: MyEnvType, stmts: List[Ast.Stmt])(implicit namespace: String): (MyEnvType, EnvValue) = {
+  private def runAll(env: MyEnvType, stmts: List[Ast.FnBodyStmt])(implicit namespace: String): (MyEnvType, EnvValue) = {
     stmts.foldLeft((env, Local: EnvValue)) { case ((curEnv, _), nextStmt) => run(curEnv, nextStmt) }
   }
 
-  private def evalStruct(env: MyEnvType, s: Ast.Struct)(implicit namespace: String): EnvValue = {
-    s.args.foreach(a => evalExpr(env, a.tpe))
-    val res = FlatValue(Env.fullName(namespace, s.name))
-    cache.put(s.id, res)
+  private def evalVal(env: MyEnvType, v: Ast.Val)(implicit namespace: String): EnvValue = {
+    evalExpr(env, v.expr)
+    val res = FlatValue(Env.fullName(namespace, v.name))
+    cache.put(v.id, res)
     res
   }
 
@@ -83,7 +87,7 @@ class NamespaceResolver {
   private def runTopLevel(env: MyEnvType, stmt: Ast.TopLevelStmt)(implicit namespace: String): Unit = {
     stmt match {
       case d: Ast.Def       => env.set(d.name, Lazy(() => evalExpr(env, d.lambda)))
-      case s: Ast.Struct    => env.set(s.name, Lazy(() => evalStruct(env, s)))
+      case v: Ast.Val       => env.set(v.name, Lazy(() => evalVal(env, v)))
       case n: Ast.Namespace => env.set(n.name, Lazy(() => evalNamespace(env, n)))
     }
   }
@@ -113,24 +117,27 @@ class NamespaceResolver {
             val newOutType = outType.map(rewriteNames)
             val newBody = rewriteNames(body)
             Ast.Lambda(id, newName, newArgs, newOutType, newBody)
+          case s: Ast.Struct =>
+            val newArgs = s.args.map { arg => arg.copy(tpe = rewriteNames(arg.tpe)) }
+            s.copy(args = newArgs)
         }
     }
   }
 
-  private def rewriteNames(stmts: List[Ast.Stmt]): List[Ast.Stmt] = {
+  private def rewriteNames(stmts: List[Ast.FnBodyStmt]): List[Ast.FnBodyStmt] = {
     stmts.map {
-      case Ast.Val(name, expr) => Ast.Val(name, rewriteNames(expr))
-      case expr: Ast.Expr      => rewriteNames(expr)
+      case Ast.Val(id, name, expr) => Ast.Val(id, name, rewriteNames(expr))
+      case expr: Ast.Expr          => rewriteNames(expr)
     }
   }
 
   private def flatten(stmts: List[Ast.TopLevelStmt]): List[Ast.FlatTopLevelStmt] = {
     stmts.flatMap {
       case d: Ast.Def => List(Ast.Def(rewriteNames(d.lambda).asInstanceOf[Ast.Lambda]))
-      case s: Ast.Struct =>
-        val newName = cache(s.id).fullName
-        val newArgs = s.args.map(arg => Ast.ArgDecl(arg.name, rewriteNames(arg.tpe)))
-        List(Ast.Struct(s.id, newName, s.typeArgs, newArgs))
+      case v: Ast.Val =>
+        val newName = cache(v.id).fullName
+        val newExpr = rewriteNames(v.expr)
+        List(Ast.Val(v.id, newName, newExpr))
       case n: Ast.Namespace => flatten(n.children)
     }
   }

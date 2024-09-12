@@ -13,6 +13,6 @@ object InterpreterTest extends App {
 
   val runner = new RuntimeTestRunner(runProgram)
   runner.runTests()
-  //runner.runTest("tests/well_typed/int_arrays.mist")
+  //runner.runTest("tests/well_typed/namespaces.mist")
 
 }

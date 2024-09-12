@@ -12,23 +12,24 @@ class RuntimeTestRunner(runProgram: Ast.Program => Any) {
     }
   }
 
-  def runTest(path: Path): Unit = {
+  def runTest(path: Path, printStackTrace: Boolean): Unit = {
     println(path)
-    val src = Source.fromFile(path.toFile)
-    val lines = src.getLines().toList
-    src.close()
-
-    val expected = lines.head
-    val programText = lines.tail.mkString("\n")
-    val p = FastparseParser.parse(programText)
-
     try {
+      val src = Source.fromFile(path.toFile)
+      val lines = src.getLines().toList
+      src.close()
+
+      val expected = lines.head
+      val programText = lines.tail.mkString("\n")
+      val p = FastparseParser.parse(programText)
+
       val res = renderRes(runProgram(p))
       assert(res == expected, s"Expected $expected, got $res")
     } catch {
       case e =>
         println(s"$path FAILED: ${e}")
-        e.printStackTrace()
+        if (printStackTrace)
+          e.printStackTrace()
     }
   }
 
@@ -36,12 +37,12 @@ class RuntimeTestRunner(runProgram: Ast.Program => Any) {
     val fs = FileSystems.getDefault
     val pathChunks = s.split(fs.getSeparator)
     val path = fs.getPath(pathChunks.head, pathChunks.tail: _*)
-    runTest(path)
+    runTest(path, printStackTrace = true)
   }
 
   def runTests(): Unit = {
     val testFiles = Files.list(FileSystems.getDefault.getPath("tests", "well_typed")).iterator().asScala
-    testFiles.foreach(runTest)
+    testFiles.foreach(path => runTest(path, printStackTrace = false))
   }
 
 }

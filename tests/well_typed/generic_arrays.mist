@@ -1,6 +1,6 @@
 "List(true, false)"
 
-struct ArrayOps[A: Type](get: Func[Int, A], set: Func[Int, A, Unit], print: Func[String], length: Int)
+def ArrayOps[T: Type] = Struct(get: Func[Int, A], set: Func[Int, A, Unit], print: Func[String], length: Int)
 
 namespace Arrays {
   def makeIntArray(length: Int): ArrayOps[Int] = {

@@ -82,6 +82,9 @@ object CodeGenerator {
   private def compileTopLevel(stmt: JavaAst.TopLevelStmt): String = stmt match {
     case s: JavaAst.Struct => compileStruct(s)
     case d: JavaAst.Def    => compileFunc(d)
+    case v: JavaAst.StaticLet =>
+      val compiledExpr = compileExpr(v.expr)
+      s"static final ${v.tpe} ${v.name} = $compiledExpr;"
   }
 
   def compile(program: Program, pkg: List[String], className: String): String = {

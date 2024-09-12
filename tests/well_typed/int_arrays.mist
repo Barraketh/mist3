@@ -1,6 +1,6 @@
 "List(4, 5)"
 
-struct Range(foreach: Func[Func[Int, Unit], Unit])
+lazy Range = Struct(foreach: Func[Func[Int, Unit], Unit])
 
 namespace Range$ {
   def foreachRec(f: Func[Int, Unit], max: Int, i: Int): Unit = {
@@ -16,7 +16,7 @@ namespace Range$ {
   }
 }
 
-struct IntArrayOps(get: Func[Int, Int], set: Func[Int, Int, Unit], print: Func[String], length: Int)
+lazy IntArrayOps = Struct(get: Func[Int, Int], set: Func[Int, Int, Unit], print: Func[String], length: Int)
 namespace IntArrayOps$ {
   def make(length: Int): IntArrayOps = {
     val arr = intArrayMake(length)

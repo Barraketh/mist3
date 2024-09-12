@@ -3,7 +3,7 @@
 def foo(): Foo.FooStruct = Foo.FooStruct(Foo.Bar.b(), "hello")
 
 namespace Foo {
-  struct FooStruct(a: Int, b: String)
+  lazy FooStruct = Struct(a: Int, b: String)
 
   def a(): Int = 3
 
