@@ -29,7 +29,7 @@ class NamespaceResolver {
       case Ast.If(_, cond, succ, fail) =>
         List(cond, succ, fail).foreach(e => evalExpr(env, e))
         Local
-      case Ast.Lambda(id, name, args, outType, body) =>
+      case Ast.Lambda(id, name, args, outType, body, _) =>
         args.foreach(arg => evalExpr(env, arg.tpe))
         outType.foreach(out => evalExpr(env, out))
 
@@ -111,12 +111,12 @@ class NamespaceResolver {
           case Ast.If(id, expr, success, fail) =>
             Ast.If(id, rewriteNames(expr), rewriteNames(success), rewriteNames(fail))
           case Ast.Block(id, stmts) => Ast.Block(id, rewriteNames(stmts))
-          case Ast.Lambda(id, name, args, outType, body) =>
+          case Ast.Lambda(id, name, args, outType, body, isComptime) =>
             val newName = name.map(_ => cache(id).fullName)
             val newArgs = args.map(arg => Ast.ArgDecl(arg.name, rewriteNames(arg.tpe)))
             val newOutType = outType.map(rewriteNames)
             val newBody = rewriteNames(body)
-            Ast.Lambda(id, newName, newArgs, newOutType, newBody)
+            Ast.Lambda(id, newName, newArgs, newOutType, newBody, isComptime)
           case s: Ast.Struct =>
             val newArgs = s.args.map { arg => arg.copy(tpe = rewriteNames(arg.tpe)) }
             s.copy(args = newArgs)

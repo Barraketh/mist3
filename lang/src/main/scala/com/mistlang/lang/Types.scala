@@ -1,11 +1,16 @@
 package com.mistlang.lang
 
+import com.mistlang.lang.TypeInterpreter.TypeCache
+
 sealed trait ComptimeValue
 
 object ComptimeValue {
   case class SimpleValue(value: Any) extends ComptimeValue
   case class Dict(m: Map[String, ComptimeValue]) extends ComptimeValue
   case class Func(f: List[TypedValue] => TypedValue) extends ComptimeValue
+  case class CachingFunc(f: List[TypedValue] => (TypeCache, TypedValue)) extends ComptimeValue {
+    val cache = scala.collection.mutable.Map[List[TypedValue], (TypeCache, TypedValue)]()
+  }
   case object UnitValue extends ComptimeValue
 }
 
@@ -23,4 +28,4 @@ object Types {
   case class StructType(args: List[(String, Type)]) extends Type
 }
 
-case class TypedValue(tpe: Type, value: Option[ComptimeValue], name: Option[String] = None)
+case class TypedValue(tpe: Type, value: Option[ComptimeValue], name: Option[String] = None, isComptime: Boolean = false)

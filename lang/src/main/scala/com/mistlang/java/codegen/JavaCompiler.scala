@@ -114,13 +114,13 @@ class JavaCompiler {
 
         val calleeTpe = types(expr.id)
         calleeTpe match {
-          case TypedValue(f: FuncType, _, fullName) =>
+          case TypedValue(f: FuncType, _, fullName, _) =>
             val (calleeExpr, newTracker2) = fullName match {
               case Some(fullName) => (ce(JavaAst.Ident(fullName)), nameTracker)
               case None           => compileExpr(expr, types, newTracker)
             }
             (CompiledExpr(stmts, JavaAst.Call(calleeExpr.expr, exprs)), newTracker2)
-          case TypedValue(TypeType, Some(s: StructType), _) =>
+          case TypedValue(TypeType, Some(s: StructType), _, _) =>
             (CompiledExpr(stmts, JavaAst.New(compileType(s), exprs)), newTracker)
         }
 
@@ -195,7 +195,8 @@ class JavaCompiler {
   val maxExprId: Int = 10_000_000
 
   def compile(p: Ast.FlatProgram): JavaAst.Program = {
-    val runFunc = Ast.Lambda(maxExprId + 1, Some("run"), Nil, None, Ast.Block(maxExprId + 2, p.stmts))
+    val runFunc =
+      Ast.Lambda(maxExprId + 1, Some("run"), Nil, None, Ast.Block(maxExprId + 2, p.stmts), isComptime = false)
     val p2 = Ast.FlatProgram(Ast.Def(runFunc) :: p.topLevelStmts, Nil)
 
     val types = TypeInterpreter.typeAll(p2)
@@ -203,7 +204,8 @@ class JavaCompiler {
     var idCounter = 0
 
     val allStructTypes = types.values
-      .collect { case TypedValue(TypeType, Some(t: StructType), name) => t -> name }
+      .collect { case TypedValue(TypeType, Some(t: StructType), name, _) => t -> name }
+    val namedStructTypes = allStructTypes
       .groupBy(_._1)
       .map { case (s, l) =>
         s -> l.map(_._2).find(_.isDefined).flatten.getOrElse {
@@ -211,17 +213,20 @@ class JavaCompiler {
           "Struct$" + idCounter
         }
       }
-    allStructTypes.foreach { case (s, n) => structNameCache.put(s, n) }
+      .toList
+      .sortBy(_._2)
+    namedStructTypes.foreach { case (s, n) => structNameCache.put(s, n) }
 
-    val javaStructs = allStructTypes.toList.map { case (st, name) => compileStruct(name, st) }
+    val javaStructs = namedStructTypes.toList.map { case (st, name) => compileStruct(name, st) }
     implicit val topLevelNameTracker: NameTracker = p2.topLevelStmts.map(_.name).foldLeft(NameTracker.empty) {
       case (curTracker, nextName) => curTracker.declareName(nextName)._2
     }
-    val javaDefs = p2.topLevelStmts.collect { case d: Ast.Def => d }.map(d => compileDef(d, types))
+    val javaDefs =
+      p2.topLevelStmts.collect { case d: Ast.Def if !d.lambda.isComptime => d }.map(d => compileDef(d, types))
 
     val javaVals = p2.topLevelStmts
       .collect { case v: Ast.Val => v }
-      .filter(v => !(types(v.expr.id).tpe == TypeType)) // We compiled structs separately above
+      .filter(v => !types(v.expr.id).isComptime) // We compiled structs separately above
       .map { v =>
         val compiled = compileExpr(v.expr, types, NameTracker.empty)._1
         // TODO: This should be enforced upstream

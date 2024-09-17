@@ -118,10 +118,16 @@ class Grammar(nextId: () => Int) {
   def lazyP[_: P]: P[Val] = P("lazy " ~/ name ~ "=" ~ expr).map { case (n, e) => Val(nextId(), n, e) }
 
   def lambda[_: P] = (P("fn ") ~/ argDeclList ~ (":" ~ typeExpr).? ~/ ("=>" ~ expr)).map {
-    case (args, outputType, body) => Lambda(nextId(), None, args, outputType, body)
+    case (args, outputType, body) => Lambda(nextId(), None, args, outputType, body, isComptime = false)
   }
   def defP[_: P] = P("def " ~/ name ~ argDeclList ~/ (":" ~ typeExpr) ~/ ("=" ~ expr)).map {
-    case (name, args, outputType, body) => Def(Lambda(nextId(), Some(name), args, Some(outputType), body))
+    case (name, args, outputType, body) =>
+      Def(Lambda(nextId(), Some(name), args, Some(outputType), body, isComptime = false))
+  }
+
+  def comptimeDefP[_: P] = P("comptime def " ~/ name ~ typeArgList ~/ (":" ~ typeExpr).? ~/ ("=" ~/ expr)).map {
+    case (name, args, outputType, body) =>
+      Def(Lambda(nextId(), Some(name), args, outputType, body, isComptime = true))
   }
 
   def struct[_: P]: P[Expr] = P("Struct" ~/ argDeclList).map { args => Struct(nextId(), args) }
@@ -140,7 +146,7 @@ class Grammar(nextId: () => Int) {
 
   def namespace[_: P] = (P("namespace") ~/ name ~ "{" ~ topLevelStmts ~ "}").map(Namespace.tupled)
 
-  def topLevelStmt[_: P]: P[TopLevelStmt] = namespace | defP | lazyP
+  def topLevelStmt[_: P]: P[TopLevelStmt] = namespace | defP | lazyP | comptimeDefP
 
   def topLevelStmts[_: P]: P[List[TopLevelStmt]] =
     P("\n".rep ~ topLevelStmt.rep(0, "\n".rep(1)) ~ "\n".rep).map(_.toList)

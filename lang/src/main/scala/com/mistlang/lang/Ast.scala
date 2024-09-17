@@ -28,7 +28,14 @@ object Ast {
   case class MemberRef(id: Int, expr: Expr, memberName: String) extends TypeExpr
   case class If(id: Int, expr: Expr, success: Expr, fail: Expr) extends Expr
   case class Block(id: Int, stmts: List[FnBodyStmt]) extends Expr
-  case class Lambda(id: Int, name: Option[String], args: List[ArgDecl], outType: Option[Expr], body: Expr) extends Expr
+  case class Lambda(
+      id: Int,
+      name: Option[String],
+      args: List[ArgDecl],
+      outType: Option[Expr],
+      body: Expr,
+      isComptime: Boolean
+  ) extends Expr
   case class Struct(id: Int, args: List[ArgDecl]) extends TypeExpr
 
 }
