@@ -36,7 +36,7 @@ class TypeInterpreter {
       case Ast.Call(_, func, args, _) =>
         val typedF = evalExpr(env, func, evalValues)
         typedF match {
-          case TypedValue(FuncType(funcArgs, out, isStar), value, name, isComptime) =>
+          case TypedValue(FuncType(funcArgs, out, isStar), value, _, _) =>
             val expectedArgs = if (isStar) {
               funcArgs.take(funcArgs.length - 1) ++ List.fill(args.length - funcArgs.length + 1)(funcArgs.last)
             } else funcArgs
@@ -49,29 +49,25 @@ class TypeInterpreter {
               checkType(expected, actual.tpe)
             }
 
-            if (!isComptime) {
-              val resValue = value match {
-                case Some(f: Func) if evalValues && typedArgs.forall(_.value.isDefined) => Some(f.f(typedArgs))
-                case _                                                                  => None
-              }
-              TypedValue(out, resValue.flatMap(_.value))
-            } else {
-              val f = value match {
-                case Some(f: CachingFunc) => f
-                case _                    => error("comptime funcs must be caching")
-              }
-              typedArgs.foreach { arg =>
-                if (arg.value.isEmpty) error("Values to comptime functions must be known at compile time")
-              }
-              f.cache.get(typedArgs) match {
-                case Some(value) => value._2
-                case None =>
-                  val cachedName = name.get + "$" + f.cache.size
-                  val (newCache, unnamedRes) = f.f(typedArgs)
-                  val res = unnamedRes.copy(name = Some(cachedName))
-                  f.cache.put(typedArgs, (newCache, res))
-                  res
-              }
+            val resValue = value match {
+              case Some(f: Func) if evalValues && typedArgs.forall(_.value.isDefined) => Some(f.f(typedArgs))
+              case _                                                                  => None
+            }
+            TypedValue(out, resValue.flatMap(_.value))
+          case TypedValue(ComptimeFunc, Some(f: CachingFunc), Some(name), _) =>
+            val typedArgs = args.map(e => evalExpr(env, e, evalValues))
+
+            typedArgs.foreach { arg =>
+              if (arg.value.isEmpty) error("Values to comptime functions must be known at compile time")
+            }
+            f.cache.get(typedArgs) match {
+              case Some(value) => value._2
+              case None =>
+                val cachedName = name + "$" + f.cache.size
+                val (newCache, unnamedRes) = f.f(typedArgs)
+                val res = unnamedRes.copy(name = Some(cachedName))
+                f.cache.put(typedArgs, (newCache, res))
+                res
             }
 
           case TypedValue(TypeType, Some(resType @ StructType(expectedArgs)), _, _) =>
@@ -113,54 +109,58 @@ class TypeInterpreter {
         val typedSucc = evalExpr(env, success, evalSuccessValue)
         val typedFail = evalExpr(env, fail, evalFailValue)
 
-        val resType = if (typedSucc.tpe == typedFail.tpe) typedSucc.tpe else AnyType
-        val value = cond.value.flatMap { c =>
-          if (c.asInstanceOf[SimpleValue].value.asInstanceOf[Boolean]) typedSucc.value
-          else typedFail.value
+        cond.value match {
+          case Some(SimpleValue(true))  => typedSucc
+          case Some(SimpleValue(false)) => typedFail
+          case None =>
+            val resType = if (typedSucc.tpe == typedFail.tpe) typedSucc.tpe else AnyType
+            TypedValue(resType, None)
         }
-        TypedValue(resType, value)
+
       case Ast.Block(_, stmts) => runAll(env.newScope, stmts, evalValues)._2
       case Ast.Lambda(_, name, args, outType, body, isComptime) =>
-        val inputTypes = args.map { arg => evalExpr(env, arg.tpe, evalValues) }.map {
-          case TypedValue(TypeType, Some(tpe), _, _) => tpe.asInstanceOf[Type]
-          case other                                 => error(s"Cannot decode type of ${other}")
-        }
-        val expectedOut = outType.map(o => evalExpr(env, o, evalValues)).map {
-          case TypedValue(TypeType, Some(tpe), _, _) => tpe.asInstanceOf[Type]
-          case other                                 => error(s"Cannot decode type of ${other}")
-        }
+        if (!isComptime) {
+          val inputTypes = args.map { arg => evalExpr(env, arg.tpe, evalValues) }.map {
+            case TypedValue(TypeType, Some(tpe), _, _) => tpe.asInstanceOf[Type]
+            case other                                 => error(s"Cannot decode type of ${other}")
+          }
 
-        val newEnv = args.zip(inputTypes).foldLeft(env.newScope) { case (curEnv, nextArg) =>
-          curEnv.put(nextArg._1.name, Strict(TypedValue(nextArg._2, None)))
-        }
+          val newEnv = args.zip(inputTypes).foldLeft(env.newScope) { case (curEnv, nextArg) =>
+            curEnv.put(nextArg._1.name, Strict(TypedValue(nextArg._2, None)))
+          }
 
-        val withRec = (name, expectedOut) match {
-          case (Some(name), Some(value)) =>
-            newEnv.put(name, Strict(TypedValue(FuncType(inputTypes, value), None)))
-          case _ => newEnv
-        }
+          val expectedOut = outType.map(o => evalExpr(newEnv, o, evalValues)).map {
+            case TypedValue(TypeType, Some(tpe), _, _) => tpe.asInstanceOf[Type]
+            case other                                 => error(s"Cannot decode type of ${other}")
+          }
 
-        val actualOut = evalExpr(withRec, body, evalValues)
-        expectedOut.foreach { o => checkType(o, actualOut.tpe) }
+          val withRec = (name, expectedOut) match {
+            case (Some(name), Some(value)) =>
+              newEnv.put(name, Strict(TypedValue(FuncType(inputTypes, value), None)))
+            case _ => newEnv
+          }
 
-        val resType = FuncType(inputTypes, expectedOut.getOrElse(actualOut.tpe))
-        val resValue = if (!isComptime) {
-          Func((values: List[TypedValue]) => {
+          val actualOut = evalExpr(withRec, body, evalValues)
+          expectedOut.foreach { o => checkType(o, actualOut.tpe) }
+
+          val resType = FuncType(inputTypes, expectedOut.getOrElse(actualOut.tpe))
+          val resValue = Func((values: List[TypedValue]) => {
             val newEnv = args.zip(values).foldLeft(env.newScope) { case (curEnv, (arg, value)) =>
               curEnv.put(arg.name, Strict(value))
             }
             evalExpr(newEnv, body, evalValues)
           })
+          TypedValue(resType, Some(resValue), name, isComptime)
         } else {
-          CachingFunc((values: List[TypedValue]) => {
+          val resValue = CachingFunc((values: List[TypedValue]) => {
             val newEnv = args.zip(values).foldLeft(env.newScope) { case (curEnv, (arg, value)) =>
               curEnv.put(arg.name, Strict(value))
             }
             val newCache = makeTypeCache()
             (newCache, evalExpr(newEnv, body, evalValues)(newCache))
           })
+          TypedValue(ComptimeFunc, Some(resValue), name, isComptime)
         }
-        TypedValue(resType, Some(resValue), name, isComptime)
 
       case s: Ast.Struct => evalStruct(env, s)
     }
@@ -330,6 +330,14 @@ object TypeInterpreter {
         List(ArrayType(BoolType)),
         StrType,
         { case SimpleValue(arr: Array[Boolean]) :: Nil => SimpleValue(arr.toList.toString()) }
+      ),
+      "panic" -> mkFunc(
+        "panic",
+        List(StrType),
+        AnyType,
+        { case SimpleValue(s: String) :: Nil =>
+          error(s)
+        }
       ),
       "Unit" -> StdEnv.unitType,
       "Any" -> StdEnv.anyType,

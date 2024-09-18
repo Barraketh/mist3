@@ -1,7 +1,8 @@
 package com.mistlang.java.codegen
 
 import com.mistlang.lang
-import com.mistlang.lang.TypeInterpreter.TypeError
+import com.mistlang.lang.ComptimeValue.CachingFunc
+import com.mistlang.lang.TypeInterpreter.{TypeCache, TypeError}
 import com.mistlang.lang.Types._
 import com.mistlang.lang.{Ast, Type, TypeInterpreter, TypedValue}
 
@@ -194,6 +195,14 @@ class JavaCompiler {
 
   val maxExprId: Int = 10_000_000
 
+  def getAllStructTypes(cache: TypeCache): List[(StructType, Option[String])] = {
+    val thisLevel = cache.values.collect { case TypedValue(TypeType, Some(t: StructType), name, _) => t -> name }.toList
+    val nextLevelCaches = cache.values.collect { case TypedValue(ComptimeFunc, Some(f: CachingFunc), _, _) =>
+      f.cache.toList.map(_._2._1)
+    }.flatten
+    thisLevel ::: nextLevelCaches.toList.flatMap(getAllStructTypes)
+  }
+
   def compile(p: Ast.FlatProgram): JavaAst.Program = {
     val runFunc =
       Ast.Lambda(maxExprId + 1, Some("run"), Nil, None, Ast.Block(maxExprId + 2, p.stmts), isComptime = false)
@@ -203,8 +212,7 @@ class JavaCompiler {
 
     var idCounter = 0
 
-    val allStructTypes = types.values
-      .collect { case TypedValue(TypeType, Some(t: StructType), name, _) => t -> name }
+    val allStructTypes = getAllStructTypes(types)
     val namedStructTypes = allStructTypes
       .groupBy(_._1)
       .map { case (s, l) =>
@@ -217,7 +225,7 @@ class JavaCompiler {
       .sortBy(_._2)
     namedStructTypes.foreach { case (s, n) => structNameCache.put(s, n) }
 
-    val javaStructs = namedStructTypes.toList.map { case (st, name) => compileStruct(name, st) }
+    val javaStructs = namedStructTypes.map { case (st, name) => compileStruct(name, st) }
     implicit val topLevelNameTracker: NameTracker = p2.topLevelStmts.map(_.name).foldLeft(NameTracker.empty) {
       case (curTracker, nextName) => curTracker.declareName(nextName)._2
     }

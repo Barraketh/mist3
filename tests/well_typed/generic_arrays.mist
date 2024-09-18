@@ -19,9 +19,15 @@ namespace Arrays {
     ArrayOps[Bool](get, set, print, length)
   }
 
+  comptime def makeArray[A: Type]: Func[Int, ArrayOps[A]] = {
+    if (A == Int) makeIntArray
+    else if (A == Bool) makeBoolArray
+    else panic("Don't know how to make an array of this type")
+  }
+
 }
 
-val arr = Arrays.makeBoolArray(2)
+val arr = Arrays.makeArray[Bool](2)
 arr.set(0, True)
 arr.set(1, False)
 arr.print()
