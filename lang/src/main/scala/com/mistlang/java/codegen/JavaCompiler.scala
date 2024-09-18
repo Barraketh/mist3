@@ -76,13 +76,6 @@ class JavaCompiler {
     )
   }
 
-  def compileDef(d: Ast.Def, types: TypeInterpreter.TypeCache)(implicit
-      topLevelNameTracker: NameTracker
-  ): JavaAst.Def = {
-    val lambda = compileLambda(d.lambda, types)
-    JavaAst.Def(d.name, lambda)
-  }
-
   def compileStruct(name: String, tpe: StructType): JavaAst.Struct = {
     JavaAst.Struct(
       name,
@@ -206,7 +199,7 @@ class JavaCompiler {
   def compile(p: Ast.FlatProgram): JavaAst.Program = {
     val runFunc =
       Ast.Lambda(maxExprId + 1, Some("run"), Nil, None, Ast.Block(maxExprId + 2, p.stmts), isComptime = false)
-    val p2 = Ast.FlatProgram(Ast.Def(runFunc) :: p.topLevelStmts, Nil)
+    val p2 = Ast.FlatProgram(Ast.Val(maxExprId + 3, "run", runFunc) :: p.topLevelStmts, Nil)
 
     val types = TypeInterpreter.typeAll(p2)
 
@@ -229,21 +222,19 @@ class JavaCompiler {
     implicit val topLevelNameTracker: NameTracker = p2.topLevelStmts.map(_.name).foldLeft(NameTracker.empty) {
       case (curTracker, nextName) => curTracker.declareName(nextName)._2
     }
-    val javaDefs =
-      p2.topLevelStmts.collect { case d: Ast.Def if !d.lambda.isComptime => d }.map(d => compileDef(d, types))
 
     val javaVals = p2.topLevelStmts
       .collect { case v: Ast.Val => v }
       .filter(v => !types(v.expr.id).isComptime) // We compiled structs separately above
       .map { v =>
-        val compiled = compileExpr(v.expr, types, NameTracker.empty)._1
+        val compiled = compileExpr(v.expr, types, topLevelNameTracker)._1
         // TODO: This should be enforced upstream
         if (compiled.stmts.nonEmpty) throw TypeError("This expr not allowed in top level stmts")
 
         JavaAst.StaticLet(v.name, compileType(types(v.expr.id).tpe), compiled.expr)
       }
 
-    JavaAst.Program(javaStructs ::: javaDefs ::: javaVals)
+    JavaAst.Program(javaStructs ::: javaVals)
   }
 }
 

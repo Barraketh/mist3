@@ -86,7 +86,6 @@ class NamespaceResolver {
 
   private def runTopLevel(env: MyEnvType, stmt: Ast.TopLevelStmt)(implicit namespace: String): Unit = {
     stmt match {
-      case d: Ast.Def       => env.set(d.name, Lazy(() => evalExpr(env, d.lambda)))
       case v: Ast.Val       => env.set(v.name, Lazy(() => evalVal(env, v)))
       case n: Ast.Namespace => env.set(n.name, Lazy(() => evalNamespace(env, n)))
     }
@@ -131,9 +130,8 @@ class NamespaceResolver {
     }
   }
 
-  private def flatten(stmts: List[Ast.TopLevelStmt]): List[Ast.FlatTopLevelStmt] = {
+  private def flatten(stmts: List[Ast.TopLevelStmt]): List[Ast.Val] = {
     stmts.flatMap {
-      case d: Ast.Def => List(Ast.Def(rewriteNames(d.lambda).asInstanceOf[Ast.Lambda]))
       case v: Ast.Val =>
         val newName = cache(v.id).fullName
         val newExpr = rewriteNames(v.expr)

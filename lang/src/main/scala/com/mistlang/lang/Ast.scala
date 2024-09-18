@@ -3,20 +3,16 @@ package com.mistlang.lang
 object Ast {
   case class Program(topLevelStmts: List[TopLevelStmt], stmts: List[FnBodyStmt])
 
-  case class FlatProgram(topLevelStmts: List[FlatTopLevelStmt], stmts: List[FnBodyStmt])
+  case class FlatProgram(topLevelStmts: List[Val], stmts: List[FnBodyStmt])
 
   sealed trait TopLevelStmt {
     def name: String
   }
-  sealed trait FlatTopLevelStmt extends TopLevelStmt
   case class ArgDecl(name: String, tpe: Expr)
-  case class Def(lambda: Lambda) extends FlatTopLevelStmt {
-    override def name: String = lambda.name.get
-  }
   case class Namespace(name: String, children: List[TopLevelStmt]) extends TopLevelStmt
 
   sealed trait FnBodyStmt
-  case class Val(id: Int, name: String, expr: Expr) extends FnBodyStmt with FlatTopLevelStmt
+  case class Val(id: Int, name: String, expr: Expr) extends FnBodyStmt with TopLevelStmt
 
   sealed trait Expr extends FnBodyStmt {
     def id: Int

@@ -204,16 +204,9 @@ class TypeInterpreter {
     }
   }
 
-  private def runTopLevel(env: MyEnvType, stmt: FlatTopLevelStmt)(implicit cache: TypeCache): Unit = {
-    stmt match {
-      case d: Def => env.set(d.name, Lazy(() => evalExpr(env, d.lambda, evalValues = true)))
-      case v: Val => env.set(v.name, Lazy(() => evalExpr(env, v.expr, evalValues = true)))
-    }
-  }
-
-  private def runAllTopLevel(env: MyEnvType, stmts: List[FlatTopLevelStmt])(implicit cache: TypeCache): MyEnvType = {
+  private def runAllTopLevel(env: MyEnvType, stmts: List[Val])(implicit cache: TypeCache): MyEnvType = {
     val newEnv = stmts.map(_.name).foldLeft(env) { case (curEnv, nextName) => curEnv.put(nextName, Strict(null)) }
-    stmts.foreach(stmt => runTopLevel(newEnv, stmt))
+    stmts.foreach(v => newEnv.set(v.name, Lazy(() => evalExpr(newEnv, v.expr, evalValues = true))))
     stmts.foreach(s => newEnv.get(s.name).foreach(_.value))
     newEnv
   }

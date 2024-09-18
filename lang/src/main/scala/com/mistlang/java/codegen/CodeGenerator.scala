@@ -28,14 +28,6 @@ object CodeGenerator {
        |""".stripMargin
   }
 
-  private def compileFunc(func: Def): String = {
-    val compiled = compileLambda(func.lambda)
-
-    s"""
-       |public static final ${func.lambda.funcType} ${func.name} = ${compiled};
-       |""".stripMargin
-  }
-
   private def compileStruct(s: Struct): String = {
     val compiledArgs = s.args.map(a => s"${a.tpe} ${a.name}").mkString(", ")
     s"""
@@ -81,10 +73,9 @@ object CodeGenerator {
 
   private def compileTopLevel(stmt: JavaAst.TopLevelStmt): String = stmt match {
     case s: JavaAst.Struct => compileStruct(s)
-    case d: JavaAst.Def    => compileFunc(d)
     case v: JavaAst.StaticLet =>
       val compiledExpr = compileExpr(v.expr)
-      s"static final ${v.tpe} ${v.name} = $compiledExpr;"
+      s"public static final ${v.tpe} ${v.name} = $compiledExpr;"
   }
 
   def compile(program: Program, pkg: List[String], className: String): String = {
