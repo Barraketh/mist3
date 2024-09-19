@@ -212,8 +212,8 @@ class TypeInterpreter {
   }
 
   def runProgram(env: MyEnvType, p: Ast.FlatProgram)(implicit cache: TypeCache): TypedValue = {
-    val nextEnv = runAllTopLevel(env, p.topLevelStmts)
-    runAll(nextEnv, p.stmts, evalValues = true)._2
+    val nextEnv = runAllTopLevel(env, p.stmts)
+    evalExpr(nextEnv, Call(-1, Ident(-2, "run"), Nil), evalValues = true)
   }
 
 }

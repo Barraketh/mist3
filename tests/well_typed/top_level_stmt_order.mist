@@ -5,4 +5,4 @@ def getBaz(foo: Foo): Int = foo.bar.baz
 lazy Foo = Struct(a: String, bar: Bar)
 lazy Bar = Struct(baz: Int)
 
-getBaz(Foo("hi", Bar(3)))
+def run(): Int = getBaz(Foo("hi", Bar(3)))

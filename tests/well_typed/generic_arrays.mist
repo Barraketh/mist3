@@ -27,7 +27,9 @@ namespace Arrays {
 
 }
 
-val arr = Arrays.makeArray[Bool](2)
-arr.set(0, True)
-arr.set(1, False)
-arr.print()
+def run(): String = {
+  val arr = Arrays.makeArray[Bool](2)
+  arr.set(0, True)
+  arr.set(1, False)
+  arr.print()
+}

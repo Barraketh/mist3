@@ -14,7 +14,7 @@ object JavaCodeGeneratorTest extends App {
 
   def runProgram(p: Ast.Program): Any = {
     val javaCompiler = new JavaCompiler
-    val flatProgram = NamespaceResolver.resolveNames(p)
+    val flatProgram = FlattenProgram(p)
     val c = gen.compile(javaCompiler.compile(flatProgram), Nil, "MyClass")
 
     val testDir = new File(scratchDir)
@@ -38,5 +38,5 @@ object JavaCodeGeneratorTest extends App {
 
   val runner = new RuntimeTestRunner(runProgram)
   runner.runTests()
-  //runner.runTest("tests/well_typed/generic_arrays.mist")
+  //runner.runTest("tests/well_typed/lazy_blocks.mist")
 }

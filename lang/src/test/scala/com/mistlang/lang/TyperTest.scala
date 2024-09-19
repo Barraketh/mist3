@@ -10,7 +10,7 @@ object TyperTest extends App {
 
   def run(s: String): Type = {
     val e = FastparseParser.parse(s)
-    val flatProgram = NamespaceResolver.resolveNames(e)
+    val flatProgram = FlattenProgram(e)
     TypeInterpreter.typeStmts(flatProgram).tpe
   }
 
@@ -21,7 +21,7 @@ object TyperTest extends App {
     src.close()
 
     val e = FastparseParser.parse(s)
-    val flatProgram = NamespaceResolver.resolveNames(e)
+    val flatProgram = FlattenProgram(e)
     try {
       TypeInterpreter.typeStmts(flatProgram)
       assert(false, "Ill typed program typechecked")

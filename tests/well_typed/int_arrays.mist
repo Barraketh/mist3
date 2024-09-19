@@ -33,9 +33,11 @@ namespace IntArrayOps$ {
   }
 }
 
-val arr = IntArrayOps$.make(2)
-arr.set(0, 1)
-arr.set(1, 2)
+def run(): String = {
+  val arr = IntArrayOps$.make(2)
+  arr.set(0, 1)
+  arr.set(1, 2)
 
-val arr2 = IntArrayOps$.map(arr, fn (i: Int) => i + 3)
-arr2.print()
+  val arr2 = IntArrayOps$.map(arr, fn (i: Int) => i + 3)
+  arr2.print()
+}

@@ -1,9 +1,9 @@
 package com.mistlang.lang
 
 object Ast {
-  case class Program(topLevelStmts: List[TopLevelStmt], stmts: List[FnBodyStmt])
+  case class Program(stmts: List[TopLevelStmt])
 
-  case class FlatProgram(topLevelStmts: List[Val], stmts: List[FnBodyStmt])
+  case class FlatProgram(stmts: List[Val])
 
   sealed trait TopLevelStmt {
     def name: String

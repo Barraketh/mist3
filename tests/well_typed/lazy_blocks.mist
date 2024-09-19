@@ -1,0 +1,9 @@
+10
+
+lazy a = {
+  val a = b + 2
+  a + 5
+}
+lazy b = 3
+
+def run(): Int = a

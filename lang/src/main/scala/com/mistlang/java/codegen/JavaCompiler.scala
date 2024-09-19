@@ -2,37 +2,35 @@ package com.mistlang.java.codegen
 
 import com.mistlang.lang
 import com.mistlang.lang.ComptimeValue.CachingFunc
-import com.mistlang.lang.TypeInterpreter.{TypeCache, TypeError}
+import com.mistlang.lang.TypeInterpreter.TypeCache
 import com.mistlang.lang.Types._
 import com.mistlang.lang.{Ast, Type, TypeInterpreter, TypedValue}
 
 class JavaCompiler {
-  val unitInstance = JavaAst.Ident("Unit.unit")
+  private val unitInstance = JavaAst.Ident("Unit.unit")
 
-  val structNameCache = scala.collection.mutable.Map[StructType, String]()
+  private val structNameCache = scala.collection.mutable.Map[StructType, String]()
+
+  private var curId = 0
+  private def nextId(): Int = {
+    curId = curId + 1
+    curId
+  }
 
   private def ce(expr: JavaAst.Expr) = CompiledExpr(Nil, expr)
 
   private def compileExprs(
       exprs: List[Ast.Expr],
-      types: lang.TypeInterpreter.TypeCache,
-      nameTracker: NameTracker
-  ): (List[CompiledExpr], NameTracker) = {
-    exprs.foldLeft((Nil: List[CompiledExpr], nameTracker)) { case ((curCompiled, curTracker), curExpr) =>
-      val (compiledExpr, nextTracker) = compileExpr(curExpr, types, curTracker)
-      (curCompiled ::: compiledExpr :: Nil, nextTracker)
-    }
+      types: lang.TypeInterpreter.TypeCache
+  ): List[CompiledExpr] = {
+    exprs.map(e => compileExpr(e, types))
   }
 
   private def compileStmts(
       stmts: List[Ast.FnBodyStmt],
-      types: TypeInterpreter.TypeCache,
-      nameTracker: NameTracker
-  ): (List[JavaAst.Stmt], NameTracker) = {
-    stmts.foldLeft((Nil: List[JavaAst.Stmt], nameTracker)) { case ((curCompiled, curTracker), curStmt) =>
-      val (compiledStmt, nextTracker) = compileStmt(curStmt, types, curTracker)
-      (curCompiled ::: compiledStmt, nextTracker)
-    }
+      types: TypeInterpreter.TypeCache
+  ): List[JavaAst.Stmt] = {
+    stmts.flatMap(stmt => compileStmt(stmt, types))
   }
 
   private def compileType(tpe: Type): String = {
@@ -56,12 +54,10 @@ class JavaCompiler {
     s"Function${argTypes.length}<${genericParams.mkString(", ")}>"
   }
 
-  private def compileLambda(l: Ast.Lambda, types: TypeInterpreter.TypeCache)(implicit
-      nameTracker: NameTracker
-  ): JavaAst.Lambda = {
+  private def compileLambda(l: Ast.Lambda, types: TypeInterpreter.TypeCache): JavaAst.Lambda = {
     val compiledStmts = l.body match {
-      case b: Ast.Block => compileStmts(b.stmts, types, nameTracker)._1
-      case other        => compileExpr(other, types, nameTracker)._1.asStmts
+      case b: Ast.Block => compileStmts(b.stmts, types)
+      case other        => compileExpr(other, types).asStmts
     }
     val body = compiledStmts.lastOption match {
       case Some(expr: JavaAst.Expr) => compiledStmts.take(compiledStmts.length - 1) ::: JavaAst.Return(expr) :: Nil
@@ -85,110 +81,90 @@ class JavaCompiler {
 
   private def compileExpr(
       expr: Ast.Expr,
-      types: TypeInterpreter.TypeCache,
-      nameTracker: NameTracker
-  ): (CompiledExpr, NameTracker) = {
+      types: TypeInterpreter.TypeCache
+  ): CompiledExpr = {
     expr match {
       case l: Ast.Literal =>
         l.value match {
-          case i: Int     => (ce(JavaAst.IntLiteral(i)), nameTracker)
-          case s: String  => (ce(JavaAst.StrLiteral(s)), nameTracker)
-          case b: Boolean => (ce(JavaAst.BoolLiteral(b)), nameTracker)
+          case i: Int     => ce(JavaAst.IntLiteral(i))
+          case s: String  => ce(JavaAst.StrLiteral(s))
+          case b: Boolean => ce(JavaAst.BoolLiteral(b))
         }
-      case Ast.Ident(_, name) =>
-        val newName = nameTracker.renamed.get(name) match {
-          case Some(n) => n
-          case None    => name
-        }
-        (ce(JavaAst.Ident(newName)), nameTracker)
+      case Ast.Ident(_, name) => ce(JavaAst.Ident(name))
       case Ast.Call(_, expr, args, _) =>
-        val (compiledArgs, newTracker) = compileExprs(args, types, nameTracker)
+        val compiledArgs = compileExprs(args, types)
         val stmts = compiledArgs.flatMap(_.stmts)
         val exprs = compiledArgs.map(_.expr)
 
         val calleeTpe = types(expr.id)
         calleeTpe match {
-          case TypedValue(f: FuncType, _, fullName, _) =>
-            val (calleeExpr, newTracker2) = fullName match {
-              case Some(fullName) => (ce(JavaAst.Ident(fullName)), nameTracker)
-              case None           => compileExpr(expr, types, newTracker)
+          case TypedValue(_: FuncType, _, fullName, _) =>
+            val calleeExpr = fullName match {
+              case Some(fullName) => ce(JavaAst.Ident(fullName))
+              case None           => compileExpr(expr, types)
             }
-            (CompiledExpr(stmts, JavaAst.Call(calleeExpr.expr, exprs)), newTracker2)
+            CompiledExpr(stmts, JavaAst.Call(calleeExpr.expr, exprs))
           case TypedValue(TypeType, Some(s: StructType), _, _) =>
-            (CompiledExpr(stmts, JavaAst.New(compileType(s), exprs)), newTracker)
+            CompiledExpr(stmts, JavaAst.New(compileType(s), exprs))
         }
 
       case i: Ast.If =>
-        compileExprs(List(i.expr, i.success, i.fail), types, nameTracker) match {
-          case (compiledCond :: compiledSuccess :: compiledFail :: Nil, tracker1) =>
+        compileExprs(List(i.expr, i.success, i.fail), types) match {
+          case compiledCond :: compiledSuccess :: compiledFail :: Nil =>
             if (compiledSuccess.stmts.isEmpty && compiledFail.stmts.isEmpty)
-              (
-                CompiledExpr(
-                  compiledCond.stmts,
-                  JavaAst.IfExpr(compiledCond.expr, compiledSuccess.expr, compiledFail.expr)
-                ),
-                tracker1
+              CompiledExpr(
+                compiledCond.stmts,
+                JavaAst.IfExpr(compiledCond.expr, compiledSuccess.expr, compiledFail.expr)
               )
             else {
-              val (resName, tracker2) = tracker1.declareName("ifRes$")
+              val resName = "ifRes$" + nextId()
               val decl = JavaAst.Decl(resName, compileType(types(i.id).tpe))
               val ifStmt = JavaAst.IfStmt(
                 compiledCond.expr,
                 compiledSuccess.stmts ::: JavaAst.Set(resName, compiledSuccess.expr) :: Nil,
                 compiledFail.stmts ::: JavaAst.Set(resName, compiledFail.expr) :: Nil
               )
-              (CompiledExpr(decl :: ifStmt :: Nil, JavaAst.Ident(resName)), tracker2)
+              CompiledExpr(decl :: ifStmt :: Nil, JavaAst.Ident(resName))
             }
         }
       case b: Ast.Block =>
         b.stmts match {
-          case Nil                     => (ce(unitInstance), nameTracker)
-          case (head: Ast.Expr) :: Nil => compileExpr(head, types, nameTracker)
+          case Nil                     => ce(unitInstance)
+          case (head: Ast.Expr) :: Nil => compileExpr(head, types)
           case (head: Ast.Val) :: Nil =>
-            val (compiled, nextTracker) = compileExpr(head.expr, types, nameTracker)
-            (CompiledExpr(compiled.stmts ::: compiled.expr :: Nil, unitInstance), nextTracker)
+            val compiled = compileExpr(head.expr, types)
+            CompiledExpr(compiled.stmts ::: compiled.expr :: Nil, unitInstance)
           case _ =>
-            val (compiled, tracker1) = compileStmts(b.stmts, types, nameTracker)
+            val compiled = compileStmts(b.stmts, types)
             compiled.lastOption match {
               case Some(e: JavaAst.Expr) =>
-                val (resName, tracker2) = nameTracker.declareName("blockRes$")
+                val resName = "blockRes$" + nextId()
                 val decl = JavaAst.Decl(resName, compileType(types(b.id).tpe))
                 val javaBlock = JavaAst.Block(compiled.take(compiled.length - 1) ::: JavaAst.Set(resName, e) :: Nil)
-                (CompiledExpr(decl :: javaBlock :: Nil, JavaAst.Ident(resName)), tracker2)
-              case _ => (CompiledExpr(compiled, unitInstance), tracker1)
+                CompiledExpr(decl :: javaBlock :: Nil, JavaAst.Ident(resName))
+              case _ => CompiledExpr(compiled, unitInstance)
             }
         }
       case Ast.MemberRef(_, expr, memberName) =>
-        val (compiled, nextTracker) = compileExpr(expr, types, nameTracker)
-        (CompiledExpr(compiled.stmts, JavaAst.MemberRef(compiled.expr, memberName)), nextTracker)
-      case l: Ast.Lambda => (ce(compileLambda(l, types)(nameTracker)), nameTracker)
+        val compiled = compileExpr(expr, types)
+        CompiledExpr(compiled.stmts, JavaAst.MemberRef(compiled.expr, memberName))
+      case l: Ast.Lambda => ce(compileLambda(l, types))
 
     }
   }
 
   private def compileStmt(
       stmt: Ast.FnBodyStmt,
-      types: TypeInterpreter.TypeCache,
-      nameTracker: NameTracker
-  ): (List[JavaAst.Stmt], NameTracker) =
+      types: TypeInterpreter.TypeCache
+  ): List[JavaAst.Stmt] =
     stmt match {
       case Ast.Val(_, name, expr) =>
-        val (newName, tracker1) = nameTracker.declareName(name)
-        val (compiled, tracker2) = compileExpr(expr, types, tracker1)
-        val finalTracker = if (name == newName) tracker2 else tracker2.rename(name, newName)
-        (
-          compiled.stmts ::: JavaAst.Let(newName, compileType(types(expr.id).tpe), compiled.expr) :: Nil,
-          finalTracker
-        )
-      case expr: Ast.Expr =>
-        val (compiled, nextTracker) = compileExpr(expr, types, nameTracker)
-        (compiled.asStmts, nextTracker)
-
+        val compiled = compileExpr(expr, types)
+        compiled.stmts ::: JavaAst.Let(name, compileType(types(expr.id).tpe), compiled.expr) :: Nil
+      case expr: Ast.Expr => compileExpr(expr, types).asStmts
     }
 
-  val maxExprId: Int = 10_000_000
-
-  def getAllStructTypes(cache: TypeCache): List[(StructType, Option[String])] = {
+  private def getAllStructTypes(cache: TypeCache): List[(StructType, Option[String])] = {
     val thisLevel = cache.values.collect { case TypedValue(TypeType, Some(t: StructType), name, _) => t -> name }.toList
     val nextLevelCaches = cache.values.collect { case TypedValue(ComptimeFunc, Some(f: CachingFunc), _, _) =>
       f.cache.toList.map(_._2._1)
@@ -197,11 +173,7 @@ class JavaCompiler {
   }
 
   def compile(p: Ast.FlatProgram): JavaAst.Program = {
-    val runFunc =
-      Ast.Lambda(maxExprId + 1, Some("run"), Nil, None, Ast.Block(maxExprId + 2, p.stmts), isComptime = false)
-    val p2 = Ast.FlatProgram(Ast.Val(maxExprId + 3, "run", runFunc) :: p.topLevelStmts, Nil)
-
-    val types = TypeInterpreter.typeAll(p2)
+    val types = TypeInterpreter.typeAll(p)
 
     var idCounter = 0
 
@@ -219,50 +191,34 @@ class JavaCompiler {
     namedStructTypes.foreach { case (s, n) => structNameCache.put(s, n) }
 
     val javaStructs = namedStructTypes.map { case (st, name) => compileStruct(name, st) }
-    implicit val topLevelNameTracker: NameTracker = p2.topLevelStmts.map(_.name).foldLeft(NameTracker.empty) {
-      case (curTracker, nextName) => curTracker.declareName(nextName)._2
-    }
 
-    val javaVals = p2.topLevelStmts
+    val javaVals = p.stmts
       .collect { case v: Ast.Val => v }
       .filter(v => !types(v.expr.id).isComptime) // We compiled structs separately above
       .map { v =>
-        val compiled = compileExpr(v.expr, types, topLevelNameTracker)._1
-        // TODO: This should be enforced upstream
-        if (compiled.stmts.nonEmpty) throw TypeError("This expr not allowed in top level stmts")
+        val compiled = compileExpr(v.expr, types)
+        val exprType = types(v.expr.id).tpe
+        val resType = compileType(exprType)
 
-        JavaAst.StaticLet(v.name, compileType(types(v.expr.id).tpe), compiled.expr)
+        val resExpr =
+          if (compiled.stmts.isEmpty) compiled.expr
+          else {
+            JavaAst.Call(
+              JavaAst.Lambda(
+                compileType(FuncType(Nil, exprType)),
+                Nil,
+                resType,
+                compiled.stmts :+ JavaAst.Return(compiled.expr)
+              ),
+              Nil
+            )
+          }
+
+        JavaAst.StaticLet(v.name, resType, resExpr)
       }
 
     JavaAst.Program(javaStructs ::: javaVals)
   }
-}
-
-case class NameTracker(declared: Set[String], renamed: Map[String, String]) {
-  private def nextName(name: String): String = {
-    val next = name + "$"
-    if (!renamed.contains(next)) next
-    else nextName(next)
-  }
-
-  def declareName(name: String) = {
-    if (!declared.contains(name)) (name, NameTracker(declared + name, renamed))
-    else {
-      val next = nextName(name)
-      (next, NameTracker(declared + next, renamed))
-    }
-  }
-
-  def rename(oldName: String, newName: String): NameTracker = {
-    if (!declared.contains(oldName)) throw new RuntimeException(s"Should not be renaming - ${oldName} not declared")
-    if (!declared.contains(newName)) throw new RuntimeException(s"New name - ${newName} not declared")
-    NameTracker(declared, renamed + (oldName -> newName))
-  }
-
-}
-
-object NameTracker {
-  val empty = NameTracker(Set.empty, Map.empty)
 }
 
 case class CompiledExpr(stmts: List[JavaAst.Stmt], expr: JavaAst.Expr) {

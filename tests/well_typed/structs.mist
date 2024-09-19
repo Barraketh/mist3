@@ -4,4 +4,4 @@ lazy Foo = Struct(a: Int, b: String)
 
 def f(foo: Foo): Int = foo.a + 3
 
-f(Foo(3, "hi"))
+def run(): Int = f(Foo(3, "hi"))

@@ -152,7 +152,7 @@ class Grammar(nextId: () => Int) {
     P("\n".rep ~ topLevelStmt.rep(0, "\n".rep(1)) ~ "\n".rep).map(_.toList)
 
   def fullExpr[_: P]: P[Expr] = P(expr ~ End)
-  def program[_: P]: P[Program] = P(topLevelStmts ~ stmts ~ End).map(Program.tupled)
+  def program[_: P]: P[Program] = P(topLevelStmts ~ End).map(Program)
 }
 
 object Grammar {

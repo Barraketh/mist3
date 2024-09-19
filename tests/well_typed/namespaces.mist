@@ -14,4 +14,4 @@ namespace Foo {
   }
 }
 
-foo().a
+def run(): Int = foo().a

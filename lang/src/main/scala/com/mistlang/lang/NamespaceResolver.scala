@@ -142,13 +142,10 @@ class NamespaceResolver {
 
   def resolveNamespaces(env: MyEnvType, p: Program): FlatProgram = {
     implicit val namespace: String = ""
-    val nextEnv = runAllTopLevel(env, p.topLevelStmts)
-    p.topLevelStmts.foreach(s => nextEnv.get(s.name).foreach(_.value))
-    runAll(nextEnv, p.stmts)
-
-    val flatTopLevel = flatten(p.topLevelStmts)
-    val newStmts = rewriteNames(p.stmts)
-    FlatProgram(flatTopLevel, newStmts)
+    val nextEnv = runAllTopLevel(env, p.stmts)
+    p.stmts.foreach(s => nextEnv.get(s.name).foreach(_.value))
+    val flatTopLevel = flatten(p.stmts)
+    FlatProgram(flatTopLevel)
   }
 }
 

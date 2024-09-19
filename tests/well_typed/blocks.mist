@@ -1,9 +1,11 @@
 14
 
-val a = 3
-a + {
-  if (a == 1) 4 else {
-    val a = a * 2
-    a + 5
+def run(): Int = {
+  val a = 3
+  a + {
+    if (a == 1) 4 else {
+      val a = a * 2
+      a + 5
+    }
   }
 }
