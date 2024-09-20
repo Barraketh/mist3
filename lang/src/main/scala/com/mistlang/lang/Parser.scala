@@ -118,16 +118,16 @@ class Grammar(nextId: () => Int) {
   def lazyP[_: P]: P[Val] = P("lazy " ~/ name ~ "=" ~ expr).map { case (n, e) => Val(nextId(), n, e) }
 
   def lambda[_: P] = (P("fn ") ~/ argDeclList ~ (":" ~ typeExpr).? ~/ ("=>" ~ expr)).map {
-    case (args, outputType, body) => Lambda(nextId(), None, args, outputType, body, isComptime = false)
+    case (args, outputType, body) => Lambda(nextId(), args, outputType, body, isComptime = false)
   }
   def defP[_: P] = P("def " ~/ name ~ argDeclList ~/ (":" ~ typeExpr) ~/ ("=" ~ expr)).map {
     case (name, args, outputType, body) =>
-      Val(nextId(), name, Lambda(nextId(), Some(name), args, Some(outputType), body, isComptime = false))
+      Val(nextId(), name, Lambda(nextId(), args, Some(outputType), body, isComptime = false))
   }
 
   def comptimeDefP[_: P] = P("comptime def " ~/ name ~ typeArgList ~/ (":" ~ typeExpr).? ~/ ("=" ~/ expr)).map {
     case (name, args, outputType, body) =>
-      Val(nextId(), name, Lambda(nextId(), Some(name), args, outputType, body, isComptime = true))
+      Val(nextId(), name, Lambda(nextId(), args, outputType, body, isComptime = true))
   }
 
   def struct[_: P]: P[Expr] = P("Struct" ~/ argDeclList).map { args => Struct(nextId(), args) }

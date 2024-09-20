@@ -4,6 +4,18 @@ import com.mistlang.interpreter.RuntimeValue.{Lazy, Strict}
 import com.mistlang.interpreter.{Env, RuntimeValue}
 import com.mistlang.lang.Ast.{FlatProgram, Program}
 
+/** This flattens the program by removing namespaces, and rewriting references accordingly.
+  *
+  * namespace A { namespace B { def foo(): Int = 1 } }
+  *
+  * val a = A.B.foo()
+  *
+  * should be rewritten to
+  *
+  * def A$B$foo(): Int = 1 val a = A$B$foo()
+  *
+  * The easiest way to do this correctly in the presence of shadowing is to use Env to track the names
+  */
 class NamespaceResolver {
   import NamespaceResolver._
 
@@ -11,7 +23,9 @@ class NamespaceResolver {
   val cache = collection.mutable.Map[Int, EnvValue]()
 
   import TypeInterpreter.error
-  private def evalExpr(env: MyEnvType, exp: Ast.Expr)(implicit namespace: String): EnvValue = {
+  private def evalExpr(env: MyEnvType, exp: Ast.Expr, name: Option[String] = None)(implicit
+      namespace: String
+  ): EnvValue = {
     val res: EnvValue = exp match {
       case _: Ast.Literal => Local
       case Ast.Ident(_, name) =>
@@ -29,7 +43,7 @@ class NamespaceResolver {
       case Ast.If(_, cond, succ, fail) =>
         List(cond, succ, fail).foreach(e => evalExpr(env, e))
         Local
-      case Ast.Lambda(id, name, args, outType, body, _) =>
+      case Ast.Lambda(id, args, outType, body, _) =>
         args.foreach(arg => evalExpr(env, arg.tpe))
         outType.foreach(out => evalExpr(env, out))
 
@@ -71,7 +85,7 @@ class NamespaceResolver {
   }
 
   private def evalVal(env: MyEnvType, v: Ast.Val)(implicit namespace: String): EnvValue = {
-    evalExpr(env, v.expr)
+    evalExpr(env, v.expr, Some(v.name))
     val res = FlatValue(Env.fullName(namespace, v.name))
     cache.put(v.id, res)
     res
@@ -110,12 +124,11 @@ class NamespaceResolver {
           case Ast.If(id, expr, success, fail) =>
             Ast.If(id, rewriteNames(expr), rewriteNames(success), rewriteNames(fail))
           case Ast.Block(id, stmts) => Ast.Block(id, rewriteNames(stmts))
-          case Ast.Lambda(id, name, args, outType, body, isComptime) =>
-            val newName = name.map(_ => cache(id).fullName)
+          case Ast.Lambda(id, args, outType, body, isComptime) =>
             val newArgs = args.map(arg => Ast.ArgDecl(arg.name, rewriteNames(arg.tpe)))
             val newOutType = outType.map(rewriteNames)
             val newBody = rewriteNames(body)
-            Ast.Lambda(id, newName, newArgs, newOutType, newBody, isComptime)
+            Ast.Lambda(id, newArgs, newOutType, newBody, isComptime)
           case s: Ast.Struct =>
             val newArgs = s.args.map { arg => arg.copy(tpe = rewriteNames(arg.tpe)) }
             s.copy(args = newArgs)

@@ -26,7 +26,6 @@ object Ast {
   case class Block(id: Int, stmts: List[FnBodyStmt]) extends Expr
   case class Lambda(
       id: Int,
-      name: Option[String],
       args: List[ArgDecl],
       outType: Option[Expr],
       body: Expr,

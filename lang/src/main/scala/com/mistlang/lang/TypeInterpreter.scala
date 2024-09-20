@@ -20,7 +20,9 @@ class TypeInterpreter {
     }
   }
 
-  private def evalExpr(env: MyEnvType, expr: Ast.Expr, evalValues: Boolean)(implicit cache: TypeCache): TypedValue = {
+  private def evalExpr(env: MyEnvType, expr: Ast.Expr, evalValues: Boolean, topLevelName: Option[String] = None)(
+      implicit cache: TypeCache
+  ): TypedValue = {
     val res: TypedValue = expr match {
       case Ast.Literal(_, value) =>
         value match {
@@ -118,7 +120,7 @@ class TypeInterpreter {
         }
 
       case Ast.Block(_, stmts) => runAll(env.newScope, stmts, evalValues)._2
-      case Ast.Lambda(_, name, args, outType, body, isComptime) =>
+      case Ast.Lambda(_, args, outType, body, isComptime) =>
         if (!isComptime) {
           val inputTypes = args.map { arg => evalExpr(env, arg.tpe, evalValues) }.map {
             case TypedValue(TypeType, Some(tpe), _, _) => tpe.asInstanceOf[Type]
@@ -134,7 +136,7 @@ class TypeInterpreter {
             case other                                 => error(s"Cannot decode type of ${other}")
           }
 
-          val withRec = (name, expectedOut) match {
+          val withRec = (topLevelName, expectedOut) match {
             case (Some(name), Some(value)) =>
               newEnv.put(name, Strict(TypedValue(FuncType(inputTypes, value), None)))
             case _ => newEnv
@@ -150,7 +152,7 @@ class TypeInterpreter {
             }
             evalExpr(newEnv, body, evalValues)
           })
-          TypedValue(resType, Some(resValue), name, isComptime)
+          TypedValue(resType, Some(resValue), topLevelName, isComptime)
         } else {
           val resValue = CachingFunc((values: List[TypedValue]) => {
             val newEnv = args.zip(values).foldLeft(env.newScope) { case (curEnv, (arg, value)) =>
@@ -159,7 +161,7 @@ class TypeInterpreter {
             val newCache = makeTypeCache()
             (newCache, evalExpr(newEnv, body, evalValues)(newCache))
           })
-          TypedValue(ComptimeFunc, Some(resValue), name, isComptime)
+          TypedValue(ComptimeFunc, Some(resValue), topLevelName, isComptime)
         }
 
       case s: Ast.Struct => evalStruct(env, s)
@@ -199,14 +201,14 @@ class TypeInterpreter {
   private def runAll(env: MyEnvType, stmts: List[FnBodyStmt], evalValues: Boolean)(implicit
       cache: TypeCache
   ): (MyEnvType, TypedValue) = {
-    stmts.foldLeft((env, unit)) { case ((curEnv, _), nextStmt) =>
-      run(curEnv, nextStmt, evalValues)
-    }
+    stmts.foldLeft((env, unit)) { case ((curEnv, _), nextStmt) => run(curEnv, nextStmt, evalValues) }
   }
 
   private def runAllTopLevel(env: MyEnvType, stmts: List[Val])(implicit cache: TypeCache): MyEnvType = {
     val newEnv = stmts.map(_.name).foldLeft(env) { case (curEnv, nextName) => curEnv.put(nextName, Strict(null)) }
-    stmts.foreach(v => newEnv.set(v.name, Lazy(() => evalExpr(newEnv, v.expr, evalValues = true))))
+    stmts.foreach(v =>
+      newEnv.set(v.name, Lazy(() => evalExpr(newEnv, v.expr, evalValues = true, topLevelName = Some(v.name))))
+    )
     stmts.foreach(s => newEnv.get(s.name).foreach(_.value))
     newEnv
   }
