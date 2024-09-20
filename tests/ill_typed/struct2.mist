@@ -1,2 +1,3 @@
-struct Foo(a: Int, b: String)
-val foo = Foo(3, 3)
+lazy Foo = Struct(a: Int, b: String)
+
+def run(): Foo = Foo(3, 3)

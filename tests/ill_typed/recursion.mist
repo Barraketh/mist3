@@ -4,4 +4,4 @@ def fib(n : Any): Int = {
   else fib(n - 1) + fib(n - 2)
 }
 
-fib(6)
+def run(): Int = fib(6)

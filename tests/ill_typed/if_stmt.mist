@@ -1,4 +1,6 @@
-def foo(a: Int): Int = a
+def foo(cond: Boolean): Int = if (cond) 1 else "2"
 
-val x = if (true) 1 else "2"
-foo(x)
+def run(): Int = {
+  val x = if (true) 1 else "2"
+  foo(x)
+}

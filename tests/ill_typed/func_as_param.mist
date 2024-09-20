@@ -2,4 +2,4 @@ def f(a: Int, b: Int, myFunc: Func[Int, Int, Int]): Int = myFunc(a, b)
 
 def f2(a: Int, b: String): Int = a
 
-f(3, 6, f2)
+def run(): Int = f(3, 6, f2)

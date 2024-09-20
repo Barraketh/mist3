@@ -1,1 +1,1 @@
-3 + "foo"
+def foo(): Any = 3 + "foo"
