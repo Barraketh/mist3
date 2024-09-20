@@ -1,10 +1,13 @@
 package com.mistlang.lang
 
 import com.mistlang.lang.Ast._
+import com.mistlang.lang.FastparseParser.IdProvider
 import fastparse._
 
 object FastparseParser {
-  def defaultIdProivder: () => Int = {
+
+  type IdProvider = () => Int
+  def defaultIdProivder: IdProvider = {
     var id = 0
 
     def nextId(): Int = {
@@ -14,7 +17,7 @@ object FastparseParser {
     nextId
   }
 
-  def parse(s: String, nextId: () => Int = defaultIdProivder): Program = {
+  def parse(s: String, nextId: IdProvider): Program = {
     val grammar = new Grammar(nextId)
     fastparse.parse(s, grammar.program(_)) match {
       case Parsed.Success(value, _) => value
@@ -26,7 +29,7 @@ object FastparseParser {
   }
 }
 
-class Grammar(nextId: () => Int) {
+class Grammar(nextId: IdProvider) {
   import Grammar._
   import SingleLineWhitespace._
 

@@ -1,7 +1,9 @@
 package com.mistlang.lang
 
+import com.mistlang.lang.FastparseParser.IdProvider
+
 object InterpreterTest extends App {
-  def runProgram(p: Ast.Program): Any = {
+  def runProgram(p: Ast.Program, idProvider: IdProvider): Any = {
     val flatProgram = FlattenProgram(p)
 
     val res = TypeInterpreter.typeStmts(flatProgram).value

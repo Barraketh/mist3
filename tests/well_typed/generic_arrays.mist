@@ -20,8 +20,8 @@ namespace Arrays {
   }
 
   comptime def makeArray[A: Type]: Func[Int, ArrayOps[A]] = {
-    if (A == Int) makeIntArray
-    else if (A == Bool) makeBoolArray
+    if (A == Int) fn (l: Int) => makeIntArray(l)
+    else if (A == Bool) fn (l: Int) => makeBoolArray(l)
     else panic("Don't know how to make an array of this type")
   }
 

@@ -1,10 +1,12 @@
 package com.mistlang.lang
 
+import com.mistlang.lang.FastparseParser.IdProvider
+
 import java.nio.file.{FileSystems, Files, Path}
 import scala.io.Source
 import scala.jdk.CollectionConverters._
 
-class RuntimeTestRunner(runProgram: Ast.Program => Any) {
+class RuntimeTestRunner(runProgram: (Ast.Program, IdProvider) => Any) {
   def renderRes(res: Any): String = {
     res match {
       case s: String => "\"" + s + "\""
@@ -21,9 +23,10 @@ class RuntimeTestRunner(runProgram: Ast.Program => Any) {
 
       val expected = lines.head
       val programText = lines.tail.mkString("\n")
-      val p = FastparseParser.parse(programText)
+      val idProvider = FastparseParser.defaultIdProivder
+      val p = FastparseParser.parse(programText, idProvider)
 
-      val res = renderRes(runProgram(p))
+      val res = renderRes(runProgram(p, idProvider))
       assert(res == expected, s"Expected $expected, got $res")
     } catch {
       case e =>

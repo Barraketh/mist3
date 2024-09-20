@@ -152,7 +152,7 @@ class TypeInterpreter {
             }
             evalExpr(newEnv, body, evalValues)
           })
-          TypedValue(resType, Some(resValue), topLevelName, isComptime)
+          TypedValue(resType, Some(resValue), None, isComptime)
         } else {
           val resValue = CachingFunc((values: List[TypedValue]) => {
             val newEnv = args.zip(values).foldLeft(env.newScope) { case (curEnv, (arg, value)) =>
@@ -161,7 +161,7 @@ class TypeInterpreter {
             val newCache = makeTypeCache()
             (newCache, evalExpr(newEnv, body, evalValues)(newCache))
           })
-          TypedValue(ComptimeFunc, Some(resValue), topLevelName, isComptime)
+          TypedValue(ComptimeFunc, Some(resValue), None, isComptime)
         }
 
       case s: Ast.Struct => evalStruct(env, s)
@@ -207,7 +207,10 @@ class TypeInterpreter {
   private def runAllTopLevel(env: MyEnvType, stmts: List[Val])(implicit cache: TypeCache): MyEnvType = {
     val newEnv = stmts.map(_.name).foldLeft(env) { case (curEnv, nextName) => curEnv.put(nextName, Strict(null)) }
     stmts.foreach(v =>
-      newEnv.set(v.name, Lazy(() => evalExpr(newEnv, v.expr, evalValues = true, topLevelName = Some(v.name))))
+      newEnv.set(
+        v.name,
+        Lazy(() => evalExpr(newEnv, v.expr, evalValues = true, topLevelName = Some(v.name)).copy(name = Some(v.name)))
+      )
     )
     stmts.foreach(s => newEnv.get(s.name).foreach(_.value))
     newEnv
@@ -228,12 +231,12 @@ object TypeInterpreter {
   def error(s: String) = throw TypeError(s)
 
   object StdEnv {
-    val unitType = TypedValue(TypeType, Some(UnitType))
-    val anyType = TypedValue(TypeType, Some(AnyType))
-    val intType = TypedValue(TypeType, Some(IntType))
-    val boolType = TypedValue(TypeType, Some(BoolType))
-    val stringType = TypedValue(TypeType, Some(StrType))
-    val typeType = TypedValue(TypeType, Some(TypeType))
+    val unitType = TypedValue(TypeType, Some(UnitType), isComptime = true)
+    val anyType = TypedValue(TypeType, Some(AnyType), isComptime = true)
+    val intType = TypedValue(TypeType, Some(IntType), isComptime = true)
+    val boolType = TypedValue(TypeType, Some(BoolType), isComptime = true)
+    val stringType = TypedValue(TypeType, Some(StrType), isComptime = true)
+    val typeType = TypedValue(TypeType, Some(TypeType), isComptime = true)
   }
 
   private val stdEnv = {

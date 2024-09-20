@@ -9,18 +9,21 @@ import scala.jdk.CollectionConverters._
 object TyperTest extends App {
 
   def run(s: String): Type = {
-    val e = FastparseParser.parse(s)
+    val idProvider = FastparseParser.defaultIdProivder
+
+    val e = FastparseParser.parse(s, idProvider)
     val flatProgram = FlattenProgram(e)
     TypeInterpreter.typeStmts(flatProgram).tpe
   }
 
   def runTest(path: Path): Unit = {
+    val idProvider = FastparseParser.defaultIdProivder
     println(path)
     val src = Source.fromFile(path.toFile)
     val s = src.getLines().mkString("\n")
     src.close()
 
-    val e = FastparseParser.parse(s)
+    val e = FastparseParser.parse(s, idProvider)
     val flatProgram = FlattenProgram(e)
     try {
       TypeInterpreter.typeStmts(flatProgram)

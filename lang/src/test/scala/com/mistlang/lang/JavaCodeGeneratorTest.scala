@@ -1,6 +1,7 @@
 package com.mistlang.lang
 
 import com.mistlang.java.codegen.{CodeGenerator, JavaCompiler}
+import com.mistlang.lang.FastparseParser.IdProvider
 
 import java.io.{BufferedWriter, File, FileWriter}
 import java.net.URLClassLoader
@@ -12,10 +13,10 @@ object JavaCodeGeneratorTest extends App {
 
   val compiler = ToolProvider.getSystemJavaCompiler
 
-  def runProgram(p: Ast.Program): Any = {
+  def runProgram(p: Ast.Program, idProvider: IdProvider): Any = {
     val javaCompiler = new JavaCompiler
     val flatProgram = FlattenProgram(p)
-    val c = gen.compile(javaCompiler.compile(flatProgram), Nil, "MyClass")
+    val c = gen.compile(javaCompiler.compile(flatProgram, idProvider), Nil, "MyClass")
 
     val testDir = new File(scratchDir)
     testDir.listFiles().toList.foreach(f => f.delete())
@@ -37,6 +38,6 @@ object JavaCodeGeneratorTest extends App {
   }
 
   val runner = new RuntimeTestRunner(runProgram)
-  runner.runTests()
-  //runner.runTest("tests/well_typed/lazy_blocks.mist")
+  //runner.runTests()
+  runner.runTest("tests/well_typed/generic_arrays.mist")
 }
