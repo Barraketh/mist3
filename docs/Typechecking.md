@@ -41,26 +41,38 @@ typechecks?
 Both can be resolved by changing out transformation in the following way:
 
 ```scala
-// Calling foo checks the parameters, and then returns String
-def foo(a, b) = {
-  assert(a == String)
-  assert(b == Int)
-  String
+// This ia a global function to typecheck a function call. We will replace every call to a function
+// foo(a, b), with a call to typecheck(foo, List(a, b))
+// This is also somewhat simplified - the real function would also support things like varargs, comptime modifiers,
+// Etc
+def typecheck(f: Type, args: List[Type]): Type = {
+  f match {
+    case Func(argTypes, outType) =>
+      assert(args.length == argTypes.length, "Wrong number of args")
+      args.zip(argTypes).foreach {
+        case (arg, expectedType) => assert(arg == expectedType, "Type mismatch")
+      }
+      outType
+    case _ => throw new Exception("Can't call " + f)
+  }
 }
 
-// Here we make sure that the body makes sense by assuming that the parameters are of the given types.
+// foo gets replaced with an instance of a function type
+val foo = Func[Int, Int, String]
+
+// Here we make sure that the body makes sense by assuming that the parameters are of the expected types.
 // This also solves the 'recursion' issue - even if 'foo' was recursive originally, the transformed 'foo'
 // is not
 {
   val a = Int
   val b = Int
-  val res = append(toString(a), b)
-  assert(res == String)
+  val res = typecheck(append, List(typecheck(toString, List(a)), b))
+  assert(res == String, "Type mismatch")
 }
 
 val c = Int
 val d = String
-foo(c, d)
+typecheck(foo, List(c, d))
 ```
 
 ## Typechecking if statements
